@@ -1,0 +1,34 @@
+#! /bin/bash
+# start-up script with JMX enabled
+# author: Wei Peng <4pengw@gmail.com>
+# version: 20141229
+# deps: wget
+
+WGET=${WGET:-'wget'}
+
+# http://stackoverflow.com/a/246128
+DIR=$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )
+
+URL_PREFIX='https://raw.githubusercontent.com/pw4ever/web-of-apks/gh-pages/bin/'
+
+MAIN='woa'
+MAIN_EXEC="${DIR}/${MAIN}"
+
+declare -a content
+content=("${MAIN}")
+
+for index in $(seq 0 $(( ${#content[@]} - 1 ))) 
+do
+    "${WGET}" -nv -nc -nd -P "${DIR}" "${URL_PREFIX}${content[$index]}"
+done
+chmod +x "${MAIN_EXEC}"
+
+JMX_PORT=$1
+
+# if the first argument is a number (for JMX port)
+if [ "${JMX_PORT}" -ge 0 ] 2> /dev/null; then
+    shift # remove JMX_PORT from the argument list
+    JVM_OPTS="${JVM_OPTS--Xmx2048m} -Dcom.sun.management.jmxremote -Dcom.sun.management.jmxremote.ssl=false -Dcom.sun.management.jmxremote.authenticate=false -Dcom.sun.management.jmxremote.port=${JMX_PORT}" "${MAIN_EXEC}" "$@"
+else # if the first argument is not a port
+    "${MAIN_EXEC}" "$@"
+fi

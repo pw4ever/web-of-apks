@@ -1,0 +1,26 @@
+#! /bin/bash
+# start-up script
+# author: Wei Peng <4pengw@gmail.com>
+# version: 20141229
+# deps: wget, java
+
+WGET=${WGET:-'wget'}
+JAVA=${JAVA:-'java'}
+
+# http://stackoverflow.com/a/246128
+DIR=$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )
+
+URL_PREFIX='https://github.com/pw4ever/web-of-apks/releases/download/tryout/'
+
+MAIN='woa.jar'
+MAIN_JAR="${DIR}/${MAIN}"
+
+declare -a content
+content=("${MAIN}" 'android.jar')
+
+for index in $(seq 0 $(( ${#content[@]} - 1 ))) 
+do
+    "${WGET}" -nv -nc -nd -P "${DIR}" "${URL_PREFIX}${content[$index]}"
+done
+
+[ -f "${MAIN_JAR}" ] && "${JAVA}" ${JVM_OPTS--Xmx2048m} -jar "${MAIN_JAR}" "$@"

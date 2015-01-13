@@ -1,0 +1,37 @@
+language: clojure
+
+branches:
+    only:
+        - gh-pages
+
+services:
+# wait till it is upgraded to 2.1+ for the new Cypher on Travis
+- neo4j
+
+jdk:
+- oraclejdk8
+- oraclejdk7
+- openjdk7
+
+before_install:
+- make prepare
+# http://www.codenes.com/blog/?p=391
+- sudo apt-get update -qq
+- if [ `uname -m` = x86_64 ]; then sudo apt-get install -qq --force-yes libgd2-xpm ia32-libs ia32-libs-multiarch; fi
+- wget http://dl.google.com/android/android-sdk_r24.0.2-linux.tgz -O sdk.tgz
+- tar xzf sdk.tgz
+- export ANDROID_HOME=$(pwd)/android-sdk-linux
+- export ANDROID_SDK_VER="21.1.2"
+- export PATH=${ANDROID_HOME}/tools:${ANDROID_HOME}/build-tools/${ANDROID_SDK_VER}:${ANDROID_HOME}/platform-tools:${PATH}
+# for "aapt"
+- echo y | android update sdk --filter build-tools-${ANDROID_SDK_VER} --no-ui --force
+
+before_script:
+- mkdir $HOME/bin/
+- export PATH=$HOME/bin/:$PATH
+
+script:
+- make -j3 release
+- woa-with-jmx 2014 -h
+- woa -h
+- find 01sample -type f | woa --prep-tags '[[["Dataset"] {"id" "dst-sample" "name" "my sample database"}]]' | woa-with-jmx 2014 -dsvvv

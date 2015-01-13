@@ -1,0 +1,114 @@
+node {
+  diameter: 30px;
+  color: #DFE1E3;
+  border-color: #D4D6D7;
+  border-width: 2px;
+  text-color-internal: #000000;
+  caption: '{id}';
+  font-size: 10px;
+}
+
+relationship {
+  color: #D4D6D7;
+  shaft-width: 1px;
+  font-size: 8px;
+  padding: 3px;
+  text-color-external: #000000;
+  text-color-internal: #000000;
+}
+
+node.AndroidAPI {
+  color: #00FF4C;
+  caption: '{name}';
+}
+
+node.Apk {
+  color: #00D5FF;
+  caption: '{package}';
+}
+
+node.Permission {
+  color: #4598DE;
+  caption: '{name}';
+}
+
+node.SigningKey {
+  color: #6600FF;
+  caption: '{sha256}';
+}
+
+node.Dex {
+  color: #CAB4D9;
+  caption: '{sha256}';
+}
+
+node.Package {
+  color: #737156;
+  caption: '{name}';
+}
+
+node.Class {
+  color: #A19B4F;
+  caption: '{name}';
+}
+
+node.Method {
+  color: #D1C732;
+  caption: '{name}';
+}
+
+node.Callback {
+  color: #F0E111;
+  caption: '{name}';
+}
+
+node.Tag {
+  color: #FFDD00;
+  caption: '{id}';
+}
+
+node.Component {
+  color: #FFDD00;
+  caption: '{instance}';
+}
+
+node.IntentFilterCategory {
+  color: #00FF4C;
+  caption: '{name}';
+}
+
+node.IntentFilterAction {
+  color: #00FF4C;
+  caption: '{name}';
+}
+
+node.Task {
+  color: #FF00FB;
+  caption: '{instance}';
+}
+
+node.Malware {
+  color: #FF0000;
+  caption: '{id}';
+}
+
+relationship.IMPLICIT_INVOKE {
+  color: #F25A29;
+  shaft-width: 2px;
+  font-size: 8px;
+  padding: 3px;
+  text-color-external: #000000;
+  text-color-internal: #FFFFFF;
+  border-color: #DC4717;
+}
+
+relationship.EXPLICIT_INVOKE {
+  color: #30B6AF;
+  shaft-width: 1px;
+  font-size: 8px;
+  padding: 3px;
+  text-color-external: #000000;
+  text-color-internal: #FFFFFF;
+  border-color: #46A39E;
+}
+

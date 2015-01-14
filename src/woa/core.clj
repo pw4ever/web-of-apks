@@ -42,6 +42,9 @@
     :assoc-fn (fn [m k _] (update-in m [k] inc))]
    
    ["-i" "--interactive" "do not exit (i.e., shutdown-agents) at the end"]
+   [nil "--delay-start SEC" "delay start for a random seconds from 1 to (max) SEC"
+    :parse-fn #(Integer/parseInt %)
+    :default 0]
 
    ;; does not work with Soot
    
@@ -183,7 +186,7 @@
   [& args]
   (let [raw (parse-opts args cli-options)
         {:keys [options summary errors]} raw
-        {:keys [verbose interactive help
+        {:keys [verbose interactive delay-start help
                 prep-tags
                 prep-virustotal
                 virustotal-rate-limit virustotal-backoff virustotal-submit
@@ -247,32 +250,38 @@
                                                 (binding [*out* *err*]
                                                   (println "virustotal report" result)))
                                               (let [ret (atom nil)]
-                                                  (cond
-                                                    ;; if result is a map, the result is returned
-                                                    (map? result)
-                                                    (reset! ret
-                                                            (vt/make-report-result-into-tags result))
-                                                    
-                                                    (= result :status-exceed-api-limit)
-                                                    (try-backoff)
+                                                (cond
+                                                  ;; if result is a map, the result is returned
+                                                  (map? result)
+                                                  (reset! ret
+                                                          (vt/make-report-result-into-tags result))
+                                                  
+                                                  (= result :status-exceed-api-limit)
+                                                  (try-backoff)
 
-                                                    (= result :response-not-found)
-                                                    (when virustotal-submit
-                                                      (try-backoff)
-                                                      (let [result
-                                                            (vt/submit-file {:file-content (io/file line)}
-                                                                            options)]
-                                                        (when (and verbose (> verbose 2))
-                                                          (binding [*out* *err*]
-                                                            (println "virustotal submit" result))))
-                                                      (swap! vt-api-call-counter dec)))
-                                                  @ret))))))))
+                                                  (= result :response-not-found)
+                                                  (when virustotal-submit
+                                                    (try-backoff)
+                                                    (let [result
+                                                          (vt/submit-file {:file-content (io/file line)}
+                                                                          options)]
+                                                      (when (and verbose (> verbose 2))
+                                                        (binding [*out* *err*]
+                                                          (println "virustotal submit" result))))
+                                                    (swap! vt-api-call-counter dec)))
+                                                @ret))))))))
                   (catch Exception e
                     (print-stack-trace-if-verbose e verbose)))
                 (recur (read-line))))))
 
         :otherwise
         (do
+          (when (and delay-start
+                     (> delay-start 0))
+            (let [delay-start (rand-int delay-start)]
+              (when (> verbose 1)
+                (println "delay start" delay-start "seconds"))
+              (Thread/sleep (* delay-start 1000))))
           (when nrepl-port
             ;; use separate thread to start nREPL, so do not delay other task
             (.. (Thread.

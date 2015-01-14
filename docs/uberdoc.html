@@ -5616,6 +5616,9 @@ net.brehaut.ClojureTools = (function (SH) {
     :default 0
     :assoc-fn (fn [m k _] (update-in m [k] inc))]
    [&quot;-i&quot; &quot;--interactive&quot; &quot;do not exit (i.e., shutdown-agents) at the end&quot;]
+   [nil &quot;--delay-start SEC&quot; &quot;delay start for a random seconds from 1 to (max) SEC&quot;
+    :parse-fn #(Integer/parseInt %)
+    :default 0]
    ;; does not work with Soot
    ;; nREPL config
    [nil &quot;--nrepl-port PORT&quot; &quot;REPL port&quot;
@@ -5727,7 +5730,7 @@ net.brehaut.ClojureTools = (function (SH) {
   [&amp; args]
   (let [raw (parse-opts args cli-options)
         {:keys [options summary errors]} raw
-        {:keys [verbose interactive help
+        {:keys [verbose interactive delay-start help
                 prep-tags
                 prep-virustotal
                 virustotal-rate-limit virustotal-backoff virustotal-submit
@@ -5807,6 +5810,13 @@ net.brehaut.ClojureTools = (function (SH) {
                 (recur (read-line))))))
         :otherwise
         (do
+          (when (and delay-start
+                     (&gt; delay-start 0))
+            (let [delay-start (* (rand-int delay-start)
+                                 1000)]
+              (when (&gt; verbose 1)
+                (println &quot;delay start&quot; delay-start &quot;seconds&quot;))
+              (Thread/sleep delay-start)))
           (when nrepl-port
             ;; use separate thread to start nREPL, so do not delay other task
             (.. (Thread.

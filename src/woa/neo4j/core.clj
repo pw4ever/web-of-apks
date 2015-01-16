@@ -334,16 +334,30 @@
 
 (defn connect
   "connect to local neo4j server at PORT"
-  [{:keys [neo4j-port neo4j-protocol verbose]
+  [{:keys [neo4j-port neo4j-protocol
+           neo4j-conn-backoff
+           verbose]
     :as options
     :or {neo4j-port (:neo4j-port @defaults)
          neo4j-protocol (:neo4j-protocol @defaults)}}]
   (let [port (if neo4j-port neo4j-port (:neo4j-port @defaults))
-        protocol (if neo4j-protocol neo4j-protocol (:neo4j-protocol @defaults))]
-    (try
-      (nr/connect (format "%1$s://localhost:%2$d/db/data/" protocol port))
-      (catch Exception e
-        (print-stack-trace-if-verbose e verbose)))))
+        protocol (if neo4j-protocol neo4j-protocol (:neo4j-protocol @defaults))
+        retry (atom nil)]
+    (loop []
+      (try
+        (nr/connect (format "%1$s://localhost:%2$d/db/data/" protocol port))
+        (reset! retry false)
+        (catch java.net.ConnectException e
+          (let [backoff (rand-int neo4j-conn-backoff)]
+            (when (and verbose (> verbose 1))
+              (binding [*out* *err*]
+                (println "Neo4j connection exception, retry in"
+                         backoff
+                         "seconds")))
+            (Thread/sleep (* backoff 1000)))
+          (reset! retry true)))
+      (when @retry
+        (recur)))))
 
 
 (defn android-api?

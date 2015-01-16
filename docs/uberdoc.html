@@ -5665,6 +5665,9 @@ net.brehaut.ClojureTools = (function (SH) {
                        0x10000)]]
    [nil &quot;--neo4j-protocol PROTOCOL&quot; &quot;Neo4j server protocol (http/https)&quot;
     :default &quot;http&quot;]
+   [nil &quot;--neo4j-conn-backoff SEC&quot; &quot;Neo4j connection retry max random backoff in seconds&quot;
+    :parse-fn #(Integer/parseInt %)
+    :default 60]
    ;; Neo4j tasks
    [&quot;-n&quot; &quot;--neo4j-task-populate&quot; &quot;populate Neo4j with APK model&quot;]
    [&quot;-t&quot; &quot;--neo4j-task-tag&quot; &quot;tag Neo4j Apk nodes with labels&quot;]
@@ -5787,24 +5790,24 @@ net.brehaut.ClojureTools = (function (SH) {
                                                 (binding [*out* *err*]
                                                   (println &quot;virustotal report&quot; result)))
                                               (let [ret (atom nil)]
-                                                  (cond
-                                                    ;; if result is a map, the result is returned
-                                                    (map? result)
-                                                    (reset! ret
-                                                            (vt/make-report-result-into-tags result))
-                                                    (= result :status-exceed-api-limit)
+                                                (cond
+                                                  ;; if result is a map, the result is returned
+                                                  (map? result)
+                                                  (reset! ret
+                                                          (vt/make-report-result-into-tags result))
+                                                  (= result :status-exceed-api-limit)
+                                                  (try-backoff)
+                                                  (= result :response-not-found)
+                                                  (when virustotal-submit
                                                     (try-backoff)
-                                                    (= result :response-not-found)
-                                                    (when virustotal-submit
-                                                      (try-backoff)
-                                                      (let [result
-                                                            (vt/submit-file {:file-content (io/file line)}
-                                                                            options)]
-                                                        (when (and verbose (&gt; verbose 2))
-                                                          (binding [*out* *err*]
-                                                            (println &quot;virustotal submit&quot; result))))
-                                                      (swap! vt-api-call-counter dec)))
-                                                  @ret))))))))
+                                                    (let [result
+                                                          (vt/submit-file {:file-content (io/file line)}
+                                                                          options)]
+                                                      (when (and verbose (&gt; verbose 2))
+                                                        (binding [*out* *err*]
+                                                          (println &quot;virustotal submit&quot; result))))
+                                                    (swap! vt-api-call-counter dec)))
+                                                @ret))))))))
                   (catch Exception e
                     (print-stack-trace-if-verbose e verbose)))
                 (recur (read-line))))))
@@ -5812,11 +5815,10 @@ net.brehaut.ClojureTools = (function (SH) {
         (do
           (when (and delay-start
                      (&gt; delay-start 0))
-            (let [delay-start (* (rand-int delay-start)
-                                 1000)]
+            (let [delay-start (rand-int delay-start)]
               (when (&gt; verbose 1)
                 (println &quot;delay start&quot; delay-start &quot;seconds&quot;))
-              (Thread/sleep delay-start)))
+              (Thread/sleep (* delay-start 1000))))
           (when nrepl-port
             ;; use separate thread to start nREPL, so do not delay other task
             (.. (Thread.
@@ -6182,16 +6184,30 @@ net.brehaut.ClojureTools = (function (SH) {
                                 &quot;SET n:AndroidAPI&quot;])
                      {:regex &quot;L?(?:android\\.|com\\.android\\.|dalvik\\.).*&quot;})]))))</pre></td></tr><tr><td class="docs"><p>connect to local neo4j server at PORT</p>
 </td><td class="codes"><pre class="brush: clojure">(defn connect
-  [{:keys [neo4j-port neo4j-protocol verbose]
+  [{:keys [neo4j-port neo4j-protocol
+           neo4j-conn-backoff
+           verbose]
     :as options
     :or {neo4j-port (:neo4j-port @defaults)
          neo4j-protocol (:neo4j-protocol @defaults)}}]
   (let [port (if neo4j-port neo4j-port (:neo4j-port @defaults))
-        protocol (if neo4j-protocol neo4j-protocol (:neo4j-protocol @defaults))]
-    (try
-      (nr/connect (format &quot;%1$s://localhost:%2$d/db/data/&quot; protocol port))
-      (catch Exception e
-        (print-stack-trace-if-verbose e verbose)))))</pre></td></tr><tr><td class="docs"><p>test whether NAME is part of Android API</p>
+        protocol (if neo4j-protocol neo4j-protocol (:neo4j-protocol @defaults))
+        retry (atom nil)]
+    (loop []
+      (try
+        (nr/connect (format &quot;%1$s://localhost:%2$d/db/data/&quot; protocol port))
+        (reset! retry false)
+        (catch java.net.ConnectException e
+          (let [backoff (rand-int neo4j-conn-backoff)]
+            (when (and verbose (&gt; verbose 1))
+              (binding [*out* *err*]
+                (println &quot;Neo4j connection exception, retry in&quot;
+                         backoff
+                         &quot;seconds&quot;)))
+            (Thread/sleep (* backoff 1000)))
+          (reset! retry true)))
+      (when @retry
+        (recur)))))</pre></td></tr><tr><td class="docs"><p>test whether NAME is part of Android API</p>
 </td><td class="codes"><pre class="brush: clojure">(defn android-api?
   [name]
   (let [name (str name)]

@@ -97,7 +97,10 @@
                        0x10000)]]
    [nil "--neo4j-protocol PROTOCOL" "Neo4j server protocol (http/https)"
     :default "http"]
-
+   [nil "--neo4j-conn-backoff SEC" "Neo4j connection retry max random backoff in seconds"
+    :parse-fn #(Integer/parseInt %)
+    :default 60]
+   
    ;; Neo4j tasks
    ["-n" "--neo4j-task-populate" "populate Neo4j with APK model"]
    ["-t" "--neo4j-task-tag" "tag Neo4j Apk nodes with labels"]

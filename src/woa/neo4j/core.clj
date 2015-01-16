@@ -342,10 +342,11 @@
          neo4j-protocol (:neo4j-protocol @defaults)}}]
   (let [port (if neo4j-port neo4j-port (:neo4j-port @defaults))
         protocol (if neo4j-protocol neo4j-protocol (:neo4j-protocol @defaults))
-        retry (atom nil)]
+        retry (atom nil)
+        conn (atom nil)]
     (loop []
       (try
-        (nr/connect (format "%1$s://localhost:%2$d/db/data/" protocol port))
+        (reset! conn (nr/connect (format "%1$s://localhost:%2$d/db/data/" protocol port)))
         (reset! retry false)
         (catch java.net.ConnectException e
           (let [backoff (rand-int neo4j-conn-backoff)]
@@ -357,7 +358,8 @@
             (Thread/sleep (* backoff 1000)))
           (reset! retry true)))
       (when @retry
-        (recur)))))
+        (recur)))
+    @conn))
 
 
 (defn android-api?

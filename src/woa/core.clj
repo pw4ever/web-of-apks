@@ -46,9 +46,6 @@
     :parse-fn #(Integer/parseInt %)
     :default 0]
 
-   ;; does not work with Soot
-   
-
    ;; nREPL config
    [nil "--nrepl-port PORT" "REPL port"
     :parse-fn #(Integer/parseInt %)

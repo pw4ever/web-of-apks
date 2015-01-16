@@ -5619,7 +5619,6 @@ net.brehaut.ClojureTools = (function (SH) {
    [nil &quot;--delay-start SEC&quot; &quot;delay start for a random seconds from 1 to (max) SEC&quot;
     :parse-fn #(Integer/parseInt %)
     :default 0]
-   ;; does not work with Soot
    ;; nREPL config
    [nil &quot;--nrepl-port PORT&quot; &quot;REPL port&quot;
     :parse-fn #(Integer/parseInt %)
@@ -6192,10 +6191,11 @@ net.brehaut.ClojureTools = (function (SH) {
          neo4j-protocol (:neo4j-protocol @defaults)}}]
   (let [port (if neo4j-port neo4j-port (:neo4j-port @defaults))
         protocol (if neo4j-protocol neo4j-protocol (:neo4j-protocol @defaults))
-        retry (atom nil)]
+        retry (atom nil)
+        conn (atom nil)]
     (loop []
       (try
-        (nr/connect (format &quot;%1$s://localhost:%2$d/db/data/&quot; protocol port))
+        (reset! conn (nr/connect (format &quot;%1$s://localhost:%2$d/db/data/&quot; protocol port)))
         (reset! retry false)
         (catch java.net.ConnectException e
           (let [backoff (rand-int neo4j-conn-backoff)]
@@ -6207,7 +6207,8 @@ net.brehaut.ClojureTools = (function (SH) {
             (Thread/sleep (* backoff 1000)))
           (reset! retry true)))
       (when @retry
-        (recur)))))</pre></td></tr><tr><td class="docs"><p>test whether NAME is part of Android API</p>
+        (recur)))
+    @conn))</pre></td></tr><tr><td class="docs"><p>test whether NAME is part of Android API</p>
 </td><td class="codes"><pre class="brush: clojure">(defn android-api?
   [name]
   (let [name (str name)]

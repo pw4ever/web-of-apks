@@ -6197,7 +6197,8 @@ net.brehaut.ClojureTools = (function (SH) {
       (try
         (reset! conn (nr/connect (format &quot;%1$s://localhost:%2$d/db/data/&quot; protocol port)))
         (reset! retry false)
-        (catch java.net.ConnectException e
+        ;; java.io.IOException catches java.net.SocketException and other situations
+        (catch java.io.IOException e
           (let [backoff (rand-int neo4j-conn-backoff)]
             (when (and verbose (&gt; verbose 1))
               (binding [*out* *err*]

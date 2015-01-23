@@ -348,7 +348,8 @@
       (try
         (reset! conn (nr/connect (format "%1$s://localhost:%2$d/db/data/" protocol port)))
         (reset! retry false)
-        (catch java.net.ConnectException e
+        ;; java.io.IOException catches java.net.SocketException and other situations
+        (catch java.io.IOException e
           (let [backoff (rand-int neo4j-conn-backoff)]
             (when (and verbose (> verbose 1))
               (binding [*out* *err*]

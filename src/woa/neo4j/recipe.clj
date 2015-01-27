@@ -11,7 +11,8 @@
 
 ;;; declaration
 
-(declare get-app-skeleton)
+(declare get-app-skeleton
+         get-app-by-class-complexity)
 
 ;;; implementation
 

@@ -85,6 +85,9 @@
    [nil "--soot-dump-all-invokes" "dump all invokes"]
    [nil "--soot-result-exclude-app-methods" "exclude app internal methods from the result"]
 
+   [nil "--dump-soot-model FILE" "dump Soot model to FILE"]
+   [nil "--load-soot-model FILE" "load Soot model from FILE"]
+
    ;; Neo4j config
    [nil "--neo4j-port PORT" "Neo4j server port"
     :parse-fn #(Integer/parseInt %)
@@ -133,6 +136,8 @@
    {:keys [verbose
 
            soot-task-build-model
+
+           dump-soot-model
            
            neo4j-port neo4j-protocol
            neo4j-task-populate neo4j-task-tag neo4j-task-untag
@@ -151,6 +156,10 @@
         
         (when soot-task-build-model
           (let [apk (soot-parse/parse-apk file-path options)]
+            (when dump-soot-model
+              (with-open [model-io (io/writer dump-soot-model :append true)]
+                (binding [*out* model-io]
+                  (prn apk))))
             (when neo4j-task-populate
               (neo4j/populate-from-parsed-apk apk
                                               options))))
@@ -191,6 +200,7 @@
                 prep-virustotal
                 virustotal-rate-limit virustotal-backoff virustotal-submit
                 nrepl-port
+                load-soot-model
                 neo4j-task-populate]} options]
     (try
       ;; print out error messages if any
@@ -306,6 +316,23 @@
               (with-mutex-locked
                 (println "Neo4j:" "index created"))))
 
+          ;; load Soot model and populate Neo4j graph
+          (when load-soot-model
+            (try
+              (with-open [model-io (io/reader load-soot-model)]
+                (binding [*in* model-io]
+                  (loop [line (read-line)]
+                    (when line
+                      (let [apk (read-string line)]
+                        (when apk
+                          (when neo4j-task-populate
+                            (neo4j/populate-from-parsed-apk apk
+                                                            options)))
+                        (recur (read-line)))))))
+              (catch Exception e
+                (print-stack-trace-if-verbose e verbose))))
+
+          ;; do the work for each line
           (loop [line (read-line)]
             (when line
               ;; ex.: {:file-path "a/b.apk" :tags [{["Dataset"] {"id" "dst-my" "name" "my dataset"}}]}

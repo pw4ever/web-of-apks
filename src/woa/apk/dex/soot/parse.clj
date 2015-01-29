@@ -69,6 +69,7 @@
                                             #"^java\.lang\.reflect"
                                             #"^java\.security"]}}
    {:keys [soot-android-jar-path
+           soot-show-result
            soot-result-include-invoke-arguments
            soot-result-exclude-app-methods
            soot-parallel-jobs
@@ -297,7 +298,8 @@
                                 (.. Thread currentThread interrupt))))
                           
                           ;; must be in Soot body to ensure content/arguments can be printed
-                          (when (and verbose (> verbose 2))
+                          (when (or soot-show-result
+                                    (and verbose (> verbose 2)))
                             (pprint @result))))
                 step2-result (step2 step1-result)])
           ;; catch Exception to prevent disrupting outer threads

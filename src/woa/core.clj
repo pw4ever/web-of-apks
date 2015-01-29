@@ -79,7 +79,8 @@
     :parse-fn #(Integer/parseInt %)
     :default 1
     :validate [#(> % 0)
-               (format "You need at least 1 job to proceed")]]   
+               (format "You need at least 1 job to proceed")]]
+   [nil "--soot-show-result" "show APK analysis result"]
    [nil "--soot-result-include-invoke-arguments" "include invoke arguments (for comparison)"]
    [nil "--soot-no-implicit-cf" "do not detect implicit control flows (for comparison)"]
    [nil "--soot-dump-all-invokes" "dump all invokes"]

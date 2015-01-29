@@ -5886,24 +5886,32 @@ net.brehaut.ClojureTools = (function (SH) {
             (when (&gt; verbose 1)
               (with-mutex-locked
                 (println &quot;Neo4j:&quot; &quot;index created&quot;))))
-          ;; load Soot model and populate Neo4j graph
+          ;; load Soot model and populate Neo4j graph (need to be single-threaded to avoid Neo4j contention)
           (when load-soot-model
             (try
-              (with-open [model-io (io/reader load-soot-model)]
-                (binding [*in* model-io]
-                  (loop [line (read-line)]
-                    (when line
-                      (let [apk (read-string line)]
-                        (when apk
-                          (when neo4j-task-populate
-                            (neo4j/populate-from-parsed-apk apk
-                                                            options)))
-                        (recur (read-line)))))))
+              (let [counter (atom 0)]
+                (with-open [model-io (io/reader load-soot-model)]
+                  (binding [*in* model-io]
+                    (loop [line (read-line)]
+                      (when (not (str/blank? line))
+                        (let [apk (read-string line)]
+                          (when apk
+                            (swap! counter inc)
+                            (when (and verbose
+                                       (&gt; verbose 0))
+                              (println (format &quot;%1$d:&quot; @counter)
+                                       (get-in apk [:manifest :package])
+                                       (get-in apk [:manifest :android:versionCode])
+                                       (get-in apk [:sha256])))
+                            (when neo4j-task-populate
+                              (neo4j/populate-from-parsed-apk apk
+                                                              options)))
+                          (recur (read-line))))))))
               (catch Exception e
                 (print-stack-trace-if-verbose e verbose))))
           ;; do the work for each line
           (loop [line (read-line)]
-            (when line
+            (when (not (str/blank? line))
               ;; ex.: {:file-path &quot;a/b.apk&quot; :tags [{[&quot;Dataset&quot;] {&quot;id&quot; &quot;dst-my&quot; &quot;name&quot; &quot;my dataset&quot;}}]}
               ;; tags must have &quot;id&quot; node property
               (let [{:keys [file-path tags] :as task} (read-string line)]

@@ -317,25 +317,33 @@
               (with-mutex-locked
                 (println "Neo4j:" "index created"))))
 
-          ;; load Soot model and populate Neo4j graph
+          ;; load Soot model and populate Neo4j graph (need to be single-threaded to avoid Neo4j contention)
           (when load-soot-model
             (try
-              (with-open [model-io (io/reader load-soot-model)]
-                (binding [*in* model-io]
-                  (loop [line (read-line)]
-                    (when line
-                      (let [apk (read-string line)]
-                        (when apk
-                          (when neo4j-task-populate
-                            (neo4j/populate-from-parsed-apk apk
-                                                            options)))
-                        (recur (read-line)))))))
+              (let [counter (atom 0)]
+                (with-open [model-io (io/reader load-soot-model)]
+                  (binding [*in* model-io]
+                    (loop [line (read-line)]
+                      (when (not (str/blank? line))
+                        (let [apk (read-string line)]
+                          (when apk
+                            (swap! counter inc)
+                            (when (and verbose
+                                       (> verbose 0))
+                              (println (format "%1$d:" @counter)
+                                       (get-in apk [:manifest :package])
+                                       (get-in apk [:manifest :android:versionCode])
+                                       (get-in apk [:sha256])))
+                            (when neo4j-task-populate
+                              (neo4j/populate-from-parsed-apk apk
+                                                              options)))
+                          (recur (read-line))))))))
               (catch Exception e
                 (print-stack-trace-if-verbose e verbose))))
 
           ;; do the work for each line
           (loop [line (read-line)]
-            (when line
+            (when (not (str/blank? line))
               ;; ex.: {:file-path "a/b.apk" :tags [{["Dataset"] {"id" "dst-my" "name" "my dataset"}}]}
               ;; tags must have "id" node property
               (let [{:keys [file-path tags] :as task} (read-string line)]

@@ -217,19 +217,27 @@
   (reset! *simulator-global-state*
           {:fields {:static {}
                     :instance {}}})
-  
-  (doseq [^SootClass class classes]
-    (swap! *init-instances* assoc-in [class]
-           (simulator-new-instance class))
-    (doseq [^SootMethod clinit (.. (soot.EntryPoints/v) (clinitsOf class))]
-      (try
-        (simulate-method {:method clinit
-                          :this nil
-                          :params nil}
-                         (assoc-in options [:circumscription]
-                                   circumscription))
-        (catch Exception e
-          (print-stack-trace-if-verbose e verbose 3))))))
+  (let [;; soot.SootMethod cannot be reliably compared for value (as in a set)
+        circumscription (if (= circumscription :all)
+                          circumscription
+                          (try
+                            (->> circumscription
+                                 (map #(.. % getSignature))
+                                 set)
+                            (catch Exception e
+                              (set circumscription))))]
+    (doseq [^SootClass class classes]
+      (swap! *init-instances* assoc-in [class]
+             (simulator-new-instance class))
+      (doseq [^SootMethod clinit (.. (soot.EntryPoints/v) (clinitsOf class))]
+        (try
+          (simulate-method {:method clinit
+                            :this nil
+                            :params nil}
+                           (assoc-in options [:circumscription]
+                                     circumscription))
+          (catch Exception e
+            (print-stack-trace-if-verbose e verbose 3)))))))
 
 (defn get-all-interesting-invokes
   "get both explicit and implicit interesting invokes"
@@ -240,7 +248,16 @@
     :as options}]
   (let [all-explicit-invokes (atom #{})
         all-implicit-invokes (atom #{})
-        all-component-invokes (atom #{})]
+        all-component-invokes (atom #{})
+        ;; soot.SootMethod cannot be reliably compared for value (as in a set)
+        circumscription (if (= circumscription :all)
+                          circumscription
+                          (try
+                            (->> circumscription
+                                 (map #(.. % getSignature))
+                                 set)
+                            (catch Exception e
+                              (set circumscription))))]
     (try
       (let [{:keys [explicit-invokes
                     implicit-invokes
@@ -281,110 +298,129 @@
 
 (defn- simulate-method
   "simulate method"
-  [{:keys [^SootMethod method this params interesting-method?]
+  [{:keys [method this params interesting-method?]
     :or {interesting-method? (constantly true)}
     :as simulation-params}
    {:keys [circumscription
            soot-basic-block-simulation-budget
            soot-method-simulation-depth-budget]
     :or {circumscription :all}
-    :as options}] 
-  (cond
-    ;; only simulate method within circumscription
-    (and (not= circumscription :all)
-         (not (contains? circumscription method)))
-    {:returns #{(make-external-sexp :invoke
-                                    {:method method
-                                     :this this
-                                     :params params})}
-     :explicit-invokes #{}
-     :implicit-invokes #{}
-     :component-invokes #{}}
-    
-    (< soot-method-simulation-depth-budget 0)
-    {:returns #{(make-error-sexp :no-budget
-                                 {:method method
-                                  :this this
-                                  :params params})}
-     :explicit-invokes #{}
-     :implicit-invokes #{}
-     :component-invokes #{}}
+    :as options}]
+  
+  ;; method could be soot.SootMethodRef, so may need .resolve
+  (let [method (try
+                 (.. method resolve)
+                 (catch Exception e
+                   method))]
+    (cond
+      (not (instance? soot.SootMethod method))
+      {:returns #{(make-external-sexp :invoke
+                                      {:method method
+                                       :this this
+                                       :params params})}
+       :explicit-invokes #{}
+       :implicit-invokes #{}
+       :component-invokes #{}}      
+      
+      ;; only simulate method within circumscription
+      (and (not= circumscription :all)
+           (not (contains? circumscription
+                           (.. method getSignature))))
+      (do
+        {:returns #{(make-external-sexp :invoke
+                                        {:method method
+                                         :this this
+                                         :params params})}
+         :explicit-invokes #{}
+         :implicit-invokes #{}
+         :component-invokes #{}})
+      
+      (< soot-method-simulation-depth-budget 0)
+      (do
+        {:returns #{(make-error-sexp :no-budget
+                                     {:method method
+                                      :this this
+                                      :params params})}
+         :explicit-invokes #{}
+         :implicit-invokes #{}
+         :component-invokes #{}})
 
-    ;; no method body, cannot proceed
-    (not (.. method hasActiveBody))
-    {:returns #{(make-error-sexp :no-method-body
-                                 {:method method
-                                  :this this
-                                  :params params})}
-     :explicit-invokes #{}
-     :implicit-invokes #{}
-     :component-invokes #{}}
+      ;; no method body, cannot proceed
+      (not (.. method hasActiveBody))
+      (do
+        {:returns #{(make-error-sexp :no-method-body
+                                     {:method method
+                                      :this this
+                                      :params params})}
+         :explicit-invokes #{}
+         :implicit-invokes #{}
+         :component-invokes #{}})
 
-    :otherwise
-    (let [all-returns (atom #{})
-          all-explicit-invokes (atom #{})
-          all-implicit-invokes (atom #{})
-          all-component-invokes (atom #{})
-          
-          body (.. method getActiveBody)
+      :otherwise
+      (let [all-returns (atom #{})
+            all-explicit-invokes (atom #{})
+            all-implicit-invokes (atom #{})
+            all-component-invokes (atom #{})
+            
+            body (.. method getActiveBody)
 
-          stmt-info
-          (let [stmts (->> (.. body getUnits snapshotIterator) iterator-seq vec)
-                stmt-2-index (->> stmts
-                                  (map-indexed #(vector %2 %1))
-                                  (into {}))]
-            {:stmts stmts
-             :stmt-2-index stmt-2-index})
+            stmt-info
+            (let [stmts (->> (.. body getUnits snapshotIterator) iterator-seq vec)
+                  stmt-2-index (->> stmts
+                                    (map-indexed #(vector %2 %1))
+                                    (into {}))]
+              {:stmts stmts
+               :stmt-2-index stmt-2-index})
 
-          bb-budget (atom soot-basic-block-simulation-budget)]
-      (process-worklist
-       ;; the initial worklist
-       #{{:simulator (create-simulator this params)
-          :start-stmt (first (:stmts stmt-info))}}
-       ;; the process
-       (fn [worklist]
-         (when (and @bb-budget
-                    (> @bb-budget 0))
-           ;; width-first search to prevent malicious code exhaust bb-budget
-           (->> worklist
-                (mapcat (fn [{:keys [simulator start-stmt]}]
-                          (let [{:keys [simulator next-start-stmts]}
-                                (simulate-basic-block {:simulator simulator
-                                                       :stmt-info stmt-info
-                                                       :start-stmt start-stmt
-                                                       :method method
-                                                       :interesting-method?
-                                                       interesting-method?}
-                                                      options)]
+            bb-budget (atom soot-basic-block-simulation-budget)]
+        (process-worklist
+         ;; the initial worklist
+         #{{:simulator (create-simulator this params)
+            :start-stmt (first (:stmts stmt-info))}}
+         ;; the process
+         (fn [worklist]
+           (when (and @bb-budget
+                      (> @bb-budget 0))
+             ;; width-first search to prevent malicious code exhaust bb-budget
+             (->> worklist
+                  (mapcat (fn [{:keys [simulator start-stmt]}]
+                            (let [{:keys [simulator next-start-stmts]}
+                                  (simulate-basic-block {:simulator simulator
+                                                         :stmt-info stmt-info
+                                                         :start-stmt start-stmt
+                                                         :method method
+                                                         :interesting-method?
+                                                         interesting-method?}
+                                                        options)]
 
-                            (swap! bb-budget dec)
-                            (swap! all-returns into
-                                   (-> simulator
-                                       simulator-get-returns))
-                            (swap! all-explicit-invokes into
-                                   (-> simulator
-                                       simulator-get-explicit-invokes))
-                            (swap! all-implicit-invokes into
-                                   (-> simulator
-                                       simulator-get-implicit-invokes))
-                            (swap! all-component-invokes into
-                                   (-> simulator
-                                       simulator-get-component-invokes))
-                            ;; add the following to worklist
-                            (when (and @bb-budget
-                                       (> @bb-budget 0))
-                              (for [start-stmt (set next-start-stmts)]
-                                ;; control flow sensitive!
-                                {:simulator (-> simulator
-                                                simulator-clear-returns
-                                                simulator-clear-explicit-invokes
-                                                simulator-clear-implicit-invokes
-                                                simulator-clear-component-invokes)
-                                 :start-stmt start-stmt})))))))))
-      {:returns @all-returns
-       :explicit-invokes @all-explicit-invokes
-       :implicit-invokes @all-implicit-invokes
-       :component-invokes @all-component-invokes})))
+                              (swap! bb-budget dec)
+                              (swap! all-returns into
+                                     (-> simulator
+                                         simulator-get-returns))
+                              (swap! all-explicit-invokes into
+                                     (-> simulator
+                                         simulator-get-explicit-invokes))
+                              (swap! all-implicit-invokes into
+                                     (-> simulator
+                                         simulator-get-implicit-invokes))
+                              (swap! all-component-invokes into
+                                     (-> simulator
+                                         simulator-get-component-invokes))
+                              ;; add the following to worklist
+                              (when (and @bb-budget
+                                         (> @bb-budget 0))
+                                (for [start-stmt (set next-start-stmts)]
+                                  ;; control flow sensitive!
+                                  {:simulator (-> simulator
+                                                  simulator-clear-returns
+                                                  simulator-clear-explicit-invokes
+                                                  simulator-clear-implicit-invokes
+                                                  simulator-clear-component-invokes)
+                                   :start-stmt start-stmt})))))))))
+        {:returns @all-returns
+         :explicit-invokes @all-explicit-invokes
+         :implicit-invokes @all-implicit-invokes
+         :component-invokes @all-component-invokes}))))
 
 (defn- simulate-basic-block
   "simulate a basic block"

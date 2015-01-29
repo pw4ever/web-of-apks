@@ -6147,7 +6147,7 @@ net.brehaut.ClojureTools = (function (SH) {
                                                                (str/replace #&quot;-&quot; &quot;_&quot;)))
                                                      (str/join &quot;:&quot;)))
                                         &quot;SET l={prop}&quot;
-                                        &quot;MERGE (l)-[r:Tag]-&gt;(a)&quot;
+                                        &quot;MERGE (l)-[r:TAG]-&gt;(a)&quot;
                                         (case op
                                           :untag &quot;DELETE r&quot;
                                           :tag &quot;&quot;

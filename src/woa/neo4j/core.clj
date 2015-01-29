@@ -262,7 +262,7 @@
                                                                (str/replace #"-" "_")))
                                                      (str/join ":")))
                                         "SET l={prop}"
-                                        "MERGE (l)-[r:Tag]->(a)"
+                                        "MERGE (l)-[r:TAG]->(a)"
                                         (case op
                                           :untag "DELETE r"
                                           :tag ""

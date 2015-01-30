@@ -1,0 +1,20 @@
+#! /bin/bash
+
+PREFIX=$1
+
+if [[ "x$PREFIX" == "x" ]]; then
+  echo "${0} <prefix>" > /dev/stderr
+  exit 1
+fi
+
+export JVM_OPTS=${JVM_OPTS:-'-Xmx5g -Xms4g'}
+
+JOBS=${JOBS:-1}
+
+BLOCK_SIZE=$(du -b ${PREFIX}.list | awk "{ print \$1/${JOBS} }")
+
+WOA_OPTS=${WOA_OPTS:-"-j6 --soot-basic-block-simulation-budget 10 --soot-method-simulation-depth-budget 3"}
+
+# echo ${JVM_OPTS} ${PREFIX} ${JOBS} ${BLOCK_SIZE} ${WOA_OPTS}
+
+cat ${PREFIX}.list | parallel --env JVM_OPTS --block ${BLOCK_SIZE} --pipe -j ${JOBS} -u "woa -s --dump-soot-model ${PREFIX}{%}.dump ${WOA_OPTS}"

@@ -1,0 +1,14 @@
+#! /bin/bash
+
+PREFIX=$1
+
+if [[ "x$PREFIX" == "x" ]]; then
+  echo "${0} <prefix>" > /dev/stderr
+  exit 1
+fi
+
+while :; do
+  du -sh ${PREFIX}*.dump
+  wc -l ${PREFIX}*.dump
+  sleep 60
+done

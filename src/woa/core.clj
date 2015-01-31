@@ -67,7 +67,7 @@
    
    ;; Soot config
    ["-s" "--soot-task-build-model" "build APK model with Soot"]
-   [nil "--soot-android-jar-path" "path of android.jar for Soot's Dexpler"]
+   [nil "--soot-android-jar-path PATH" "path of android.jar for Soot's Dexpler"]
    [nil "--soot-basic-block-simulation-budget BUDGET" "basic block simulation budget"
     :parse-fn #(Long/parseLong %)
     :default 100]
@@ -335,8 +335,11 @@
                                        (get-in apk [:manifest :android:versionCode])
                                        (get-in apk [:sha256])))
                             (when neo4j-task-populate
-                              (neo4j/populate-from-parsed-apk apk
-                                                              options)))
+                              (try
+                                (neo4j/populate-from-parsed-apk apk
+                                                                options)
+                                (catch Exception e
+                                  (print-stack-trace-if-verbose e verbose)))))
                           (recur (read-line))))))))
               (catch Exception e
                 (print-stack-trace-if-verbose e verbose))))

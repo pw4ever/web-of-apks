@@ -134,16 +134,21 @@
                        conn transaction
                        [(ntx/statement
                          (str/join " "
-                                   ["MERGE (callback:Method:Callback {name:{callbackname}})"
+                                   ["MERGE (apk:Apk {sha256:{apksha256}})"
+                                    "MERGE (callback:Method:Callback {name:{callbackname}})"
                                     "MERGE (invokepackage:Package {name:{invokepackagename}})"
                                     "MERGE (invokeclass:Class {name:{invokeclassname}})"
                                     (if args
-                                      "MERGE (invokename:Method {name:{invokename},args:{args}})"
-                                      "MERGE (invokename:Method {name:{invokename}})")
+                                      "MERGE (invoke:Method {name:{invokename},args:{args}})"
+                                      "MERGE (invoke:Method {name:{invokename}})")
                                     
-                                    "MERGE (invokepackage)-[:CONTAIN]->(invokeclass)-[:CONTAIN]->(invokename)"
-                                    "MERGE (callback)-[:EXPLICIT_INVOKE]->(invokename)"])
-                         (merge {:callbackname (str class-name "." callback-name)
+                                    "MERGE (invokepackage)-[:CONTAIN]->(invokeclass)-[:CONTAIN]->(invoke)"
+                                    "MERGE (callback)-[:EXPLICIT_INVOKE]->(invoke)"
+                                    ;; to quickly find Apk from Method
+                                    "MERGE (apk)<-[:INVOKED_BY]-(invoke)"
+                                    ])
+                         (merge {:apksha256 apk-sha256
+                                 :callbackname (str class-name "." callback-name)
                                  :invokepackagename invoke-package-name
                                  :invokeclassname invoke-class-name
                                  :invokename (str invoke-class-name "." invoke-name)}
@@ -161,16 +166,21 @@
                        conn transaction
                        [(ntx/statement
                          (str/join " "
-                                   ["MERGE (callback:Method:Callback {name:{callbackname}})"
+                                   ["MERGE (apk:Apk {sha256:{apksha256}})"
+                                    "MERGE (callback:Method:Callback {name:{callbackname}})"
                                     "MERGE (invokepackage:Package {name:{invokepackagename}})"
                                     "MERGE (invokeclass:Class {name:{invokeclassname}})"
                                     (if args
-                                      "MERGE (invokename:Method {name:{invokename},args:{args}})"
-                                      "MERGE (invokename:Method {name:{invokename}})")
+                                      "MERGE (invoke:Method {name:{invokename},args:{args}})"
+                                      "MERGE (invoke:Method {name:{invokename}})")
                                     
-                                    "MERGE (invokepackage)-[:CONTAIN]->(invokeclass)-[:CONTAIN]->(invokename)"
-                                    "MERGE (callback)-[:IMPLICIT_INVOKE]->(invokename)"])
-                         (merge {:callbackname (str class-name "." callback-name)
+                                    "MERGE (invokepackage)-[:CONTAIN]->(invokeclass)-[:CONTAIN]->(invoke)"
+                                    "MERGE (callback)-[:IMPLICIT_INVOKE]->(invoke)"
+                                    ;; to quickly find Apk from Method
+                                    "MERGE (apk)<-[:INVOKED_BY]-(invoke)"
+                                    ])
+                         (merge {:apksha256 apk-sha256
+                                 :callbackname (str class-name "." callback-name)
                                  :invokepackagename invoke-package-name
                                  :invokeclassname invoke-class-name
                                  :invokename (str invoke-class-name "." invoke-name)}

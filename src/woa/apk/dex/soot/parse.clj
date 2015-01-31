@@ -77,8 +77,6 @@
     :as options}]
   (when (and apk-name (fs/readable? apk-name))
     (let [apk-path (.getPath (io/file apk-name))
-          
-          
           get-android-jar-path #(let [res-name "EMPTY"
                                       ;; hack to get "woa.jar" dir
                                       [_ path] (re-find (re-pattern (str "^file:(.*)/[^/]+!/"

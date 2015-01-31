@@ -5675,7 +5675,7 @@ net.brehaut.ClojureTools = (function (SH) {
    [nil &quot;--virustotal-submit&quot; &quot;whether submit sample to VirusTotal if not found&quot;]
    ;; Soot config
    [&quot;-s&quot; &quot;--soot-task-build-model&quot; &quot;build APK model with Soot&quot;]
-   [nil &quot;--soot-android-jar-path&quot; &quot;path of android.jar for Soot's Dexpler&quot;]
+   [nil &quot;--soot-android-jar-path PATH&quot; &quot;path of android.jar for Soot's Dexpler&quot;]
    [nil &quot;--soot-basic-block-simulation-budget BUDGET&quot; &quot;basic block simulation budget&quot;
     :parse-fn #(Long/parseLong %)
     :default 100]
@@ -5904,8 +5904,11 @@ net.brehaut.ClojureTools = (function (SH) {
                                        (get-in apk [:manifest :android:versionCode])
                                        (get-in apk [:sha256])))
                             (when neo4j-task-populate
-                              (neo4j/populate-from-parsed-apk apk
-                                                              options)))
+                              (try
+                                (neo4j/populate-from-parsed-apk apk
+                                                                options)
+                                (catch Exception e
+                                  (print-stack-trace-if-verbose e verbose)))))
                           (recur (read-line))))))))
               (catch Exception e
                 (print-stack-trace-if-verbose e verbose))))
@@ -6068,15 +6071,20 @@ net.brehaut.ClojureTools = (function (SH) {
                        conn transaction
                        [(ntx/statement
                          (str/join &quot; &quot;
-                                   [&quot;MERGE (callback:Method:Callback {name:{callbackname}})&quot;
+                                   [&quot;MERGE (apk:Apk {sha256:{apksha256}})&quot;
+                                    &quot;MERGE (callback:Method:Callback {name:{callbackname}})&quot;
                                     &quot;MERGE (invokepackage:Package {name:{invokepackagename}})&quot;
                                     &quot;MERGE (invokeclass:Class {name:{invokeclassname}})&quot;
                                     (if args
-                                      &quot;MERGE (invokename:Method {name:{invokename},args:{args}})&quot;
-                                      &quot;MERGE (invokename:Method {name:{invokename}})&quot;)
-                                    &quot;MERGE (invokepackage)-[:CONTAIN]-&gt;(invokeclass)-[:CONTAIN]-&gt;(invokename)&quot;
-                                    &quot;MERGE (callback)-[:EXPLICIT_INVOKE]-&gt;(invokename)&quot;])
-                         (merge {:callbackname (str class-name &quot;.&quot; callback-name)
+                                      &quot;MERGE (invoke:Method {name:{invokename},args:{args}})&quot;
+                                      &quot;MERGE (invoke:Method {name:{invokename}})&quot;)
+                                    &quot;MERGE (invokepackage)-[:CONTAIN]-&gt;(invokeclass)-[:CONTAIN]-&gt;(invoke)&quot;
+                                    &quot;MERGE (callback)-[:EXPLICIT_INVOKE]-&gt;(invoke)&quot;
+                                    ;; to quickly find Apk from Method
+                                    &quot;MERGE (apk)&lt;-[:INVOKED_BY]-(invoke)&quot;
+                                    ])
+                         (merge {:apksha256 apk-sha256
+                                 :callbackname (str class-name &quot;.&quot; callback-name)
                                  :invokepackagename invoke-package-name
                                  :invokeclassname invoke-class-name
                                  :invokename (str invoke-class-name &quot;.&quot; invoke-name)}
@@ -6094,15 +6102,20 @@ net.brehaut.ClojureTools = (function (SH) {
                        conn transaction
                        [(ntx/statement
                          (str/join &quot; &quot;
-                                   [&quot;MERGE (callback:Method:Callback {name:{callbackname}})&quot;
+                                   [&quot;MERGE (apk:Apk {sha256:{apksha256}})&quot;
+                                    &quot;MERGE (callback:Method:Callback {name:{callbackname}})&quot;
                                     &quot;MERGE (invokepackage:Package {name:{invokepackagename}})&quot;
                                     &quot;MERGE (invokeclass:Class {name:{invokeclassname}})&quot;
                                     (if args
-                                      &quot;MERGE (invokename:Method {name:{invokename},args:{args}})&quot;
-                                      &quot;MERGE (invokename:Method {name:{invokename}})&quot;)
-                                    &quot;MERGE (invokepackage)-[:CONTAIN]-&gt;(invokeclass)-[:CONTAIN]-&gt;(invokename)&quot;
-                                    &quot;MERGE (callback)-[:IMPLICIT_INVOKE]-&gt;(invokename)&quot;])
-                         (merge {:callbackname (str class-name &quot;.&quot; callback-name)
+                                      &quot;MERGE (invoke:Method {name:{invokename},args:{args}})&quot;
+                                      &quot;MERGE (invoke:Method {name:{invokename}})&quot;)
+                                    &quot;MERGE (invokepackage)-[:CONTAIN]-&gt;(invokeclass)-[:CONTAIN]-&gt;(invoke)&quot;
+                                    &quot;MERGE (callback)-[:IMPLICIT_INVOKE]-&gt;(invoke)&quot;
+                                    ;; to quickly find Apk from Method
+                                    &quot;MERGE (apk)&lt;-[:INVOKED_BY]-(invoke)&quot;
+                                    ])
+                         (merge {:apksha256 apk-sha256
+                                 :callbackname (str class-name &quot;.&quot; callback-name)
                                  :invokepackagename invoke-package-name
                                  :invokeclassname invoke-class-name
                                  :invokename (str invoke-class-name &quot;.&quot; invoke-name)}

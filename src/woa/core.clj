@@ -324,8 +324,12 @@
                 (with-open [model-io (io/reader load-soot-model)]
                   (binding [*in* model-io]
                     (loop [line (read-line)]
-                      (when (not (str/blank? line))
-                        (let [apk (read-string line)]
+                      (when line
+                        (let [apk (try
+                                    (read-string line)
+                                    (catch Exception e
+                                      (print-stack-trace-if-verbose e verbose)
+                                      nil))]
                           (when apk
                             (swap! counter inc)
                             (when (and verbose
@@ -346,10 +350,14 @@
 
           ;; do the work for each line
           (loop [line (read-line)]
-            (when (not (str/blank? line))
+            (when line
               ;; ex.: {:file-path "a/b.apk" :tags [{["Dataset"] {"id" "dst-my" "name" "my dataset"}}]}
               ;; tags must have "id" node property
-              (let [{:keys [file-path tags] :as task} (read-string line)]
+              (let [{:keys [file-path tags] :as task} (try
+                                                        (read-string line)
+                                                        (catch Exception e
+                                                          (print-stack-trace-if-verbose e verbose)
+                                                          nil))]
                 (try
                   (when (and file-path (fs/readable? file-path))
                     (work task options))

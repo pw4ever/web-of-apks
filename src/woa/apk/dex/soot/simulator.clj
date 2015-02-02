@@ -313,6 +313,38 @@
                  (catch Exception e
                    method))]
     (cond
+      ;;  safe invokes
+      (try
+        (let [method-name (get-soot-name method)
+              class-name (get-soot-class-name method)
+              t (get safe-invokes class-name)]
+          (or (= t :all)
+              (contains? t method-name)))
+        (catch Exception e))
+      {:returns (let [method-name (get-soot-name method)
+                      class-name (get-soot-class-name method)]
+                  (try
+                    (let [result (cond
+                                   (= method-name "<init>")
+                                   (clojure.lang.Reflector/invokeConstructor (Class/forName class-name)
+                                                                             (object-array params))
+
+                                   :otherwise
+                                   (clojure.lang.Reflector/invokeInstanceMethod this
+                                                                                method-name
+                                                                                (object-array params)))]
+                      
+                      #{result})
+                    (catch Exception e
+                      #{(make-external-sexp :invoke
+                                            {:method method
+                                             :this this
+                                             :params params})})))
+       :explicit-invokes #{}
+       :implicit-invokes #{}
+       :component-invokes #{}}      
+      
+      
       (not (instance? soot.SootMethod method))
       {:returns #{(make-external-sexp :invoke
                                       {:method method
@@ -692,23 +724,24 @@
                     (or (= t :all)
                         (contains? t method-name)))
                   (try
-                    (cond
-                      
-                      ;; special invokes: <init>
-                      (= invoke-type :special-invoke)
-                      (let [args (into-array args)]
-                        (simulator-assign base
-                                          (.. (Class/forName class-name)
-                                              (getConstructor args)
-                                              (newInstance args))
-                                          simulator))
+                    (let [result (cond
+                                   ;; special invokes: <init>
+                                   (= invoke-type :special-invoke)
+                                   (simulator-assign base
+                                                     (clojure.lang.Reflector/invokeConstructor (Class/forName class-name)
+                                                                                               (object-array args))
+                                                     simulator)
 
-                      ;; other invokes
-                      (not (extends? Sexp (class base-value)))
-                      (let [args (into-array args)]
-                        (.. (Class/forName class-name)
-                            (getMethod method-name args)
-                            (invoke base-value args))))
+                                   ;; other invokes
+                                   :otherwise
+                                   (clojure.lang.Reflector/invokeInstanceMethod base-value
+                                                                                method-name
+                                                                                (object-array args)))]
+
+                      (when (and verbose (> verbose 4))
+                        (prn "safe invoke:"
+                             class-name base-value method-name args result))
+                      result)
                     (catch Exception e
                       (invoke-method method base-value args)))
 

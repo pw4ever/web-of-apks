@@ -6247,8 +6247,8 @@ spec\s+resource\s+
                  [(ntx/statement
                    (str/join &quot; &quot;
                              [&quot;MERGE (class:Class {name:{classname}})&quot;
-                              &quot;MERGE (ancestorpackage:AndroidAPI:Package {name:{ancestorpackage}})&quot;
-                              &quot;MERGE (ancestorclass:AndroidAPI:Class {name:{ancestorclass}})&quot;
+                              &quot;MERGE (ancestorpackage:Package {name:{ancestorpackage}})&quot;
+                              &quot;MERGE (ancestorclass:Class {name:{ancestorclass}})&quot;
                               &quot;MERGE (ancestorpackage)-[:CONTAIN]-&gt;(ancestorclass)&quot;
                               &quot;MERGE (class)-[:DESCEND]-&gt;(ancestorclass)&quot;])
                    {:classname class-name

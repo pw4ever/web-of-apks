@@ -105,8 +105,8 @@
                  [(ntx/statement
                    (str/join " "
                              ["MERGE (class:Class {name:{classname}})"
-                              "MERGE (ancestorpackage:AndroidAPI:Package {name:{ancestorpackage}})"
-                              "MERGE (ancestorclass:AndroidAPI:Class {name:{ancestorclass}})"
+                              "MERGE (ancestorpackage:Package {name:{ancestorpackage}})"
+                              "MERGE (ancestorclass:Class {name:{ancestorclass}})"
                               "MERGE (ancestorpackage)-[:CONTAIN]->(ancestorclass)"
                               "MERGE (class)-[:DESCEND]->(ancestorclass)"])
                    {:classname class-name

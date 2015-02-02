@@ -14,7 +14,7 @@
 (def manifest "AndroidManifest.xml")
 
 ;; porcelain
-(declare get-badging get-manifest)
+(declare get-badging get-manifest get-layout-callbacks)
 (declare decompile-xml get-manifest-xml)
 
 ;; plumbing
@@ -22,7 +22,8 @@
          get-nodes-from-parsed-xmltree)
 (declare aapt-dump-xmltree
          aapt-dump-badging
-         aapt-dump-manifest)
+         aapt-dump-manifest
+         aapt-dump-resources)
 
 (defn get-badging
   "get badging in Clojure data structure"
@@ -123,6 +124,48 @@ reference: https://developer.android.com/guide/topics/manifest/manifest-intro.ht
                                                          [:manifest :application node]))))))
     @result))
 
+(defn get-layout-callbacks
+  "return layout id and their callbacks' class.method"
+  [apk]
+  (->> (for [[_ layout-id _1 layout-name]
+             (re-seq #"(?x)
+spec\s+resource\s+
+0x([0-9a-fA-F]+)\s+
+([^:]+):layout/([^:]+):
+"
+                     (aapt-dump-resources apk))]
+         [(Long/parseLong layout-id 16)
+          (let [xml-res-name (str "res/layout/"
+                                  layout-name
+                                  ".xml")
+                the-xml (parse-aapt-xmltree (aapt-dump-xmltree apk
+                                                               xml-res-name))
+                callbacks (atom #{})]
+            (loop [worklist the-xml]
+              (when (and worklist
+                         (not (empty? worklist)))
+                (let [new-worklist (atom #{})]
+                  (doseq [{:keys [tag attrs content]
+                           :as work} worklist]
+                    (let [attr-keys (keys attrs)
+                          callback-keys (filter #(let [key-name (name %)]
+                                                   (re-matches #"android:on.+"
+                                                               key-name))
+                                                attr-keys)
+                          info (select-keys attrs
+                                            (set/difference (set attr-keys)
+                                                            (set callback-keys)))]
+                      (doseq [callback-key callback-keys]
+                        (swap! callbacks conj
+                               (merge info
+                                      {:view-type (name tag)
+                                       :method (get attrs callback-key)}))))
+                    (swap! new-worklist into content))
+                  (recur @new-worklist))))
+            @callbacks)])
+       (into {})))
+
+
 (defn get-manifest-xml
   "get manifest in XML format"
   [apk]
@@ -191,32 +234,32 @@ reference: https://developer.android.com/guide/topics/manifest/manifest-intro.ht
                                         (range (dec (count segment-indexes))))]
                       (->> segments
                            (map (fn [lines]
-                                   (let [line (first lines)
-                                         lines (rest lines)
-                                         type (:type line)
-                                         raw (:raw line)]
-                                     (case type
-                                       ;; Namespace
-                                       "N"
-                                       (let [[_ n v] (re-find #"^([^=]+)=([^=]+)$" raw)]
-                                         {:type :namespace
-                                          :name (str "xmlns:" n)
-                                          :value v
-                                          :children (build lines)}) 
-                                       ;; Element
-                                       "E"
-                                       (let [[_ name line] (re-find #"^(\S+)\s+\(line=(\d+)\)$"
-                                                                    raw)]
-                                         {:type :element
-                                          :name name
-                                          :line line
-                                          :children (build lines)})
-                                       ;; Attribute
-                                       "A"
-                                       (let [[_
-                                              encoded-name bare-name
-                                              quoted-value encoded-value bare-value] (re-find
-                                              #"(?x)
+                                  (let [line (first lines)
+                                        lines (rest lines)
+                                        type (:type line)
+                                        raw (:raw line)]
+                                    (case type
+                                      ;; Namespace
+                                      "N"
+                                      (let [[_ n v] (re-find #"^([^=]+)=([^=]+)$" raw)]
+                                        {:type :namespace
+                                         :name (str "xmlns:" n)
+                                         :value v
+                                         :children (build lines)}) 
+                                      ;; Element
+                                      "E"
+                                      (let [[_ name line] (re-find #"^(\S+)\s+\(line=(\d+)\)$"
+                                                                   raw)]
+                                        {:type :element
+                                         :name name
+                                         :line line
+                                         :children (build lines)})
+                                      ;; Attribute
+                                      "A"
+                                      (let [[_
+                                             encoded-name bare-name
+                                             quoted-value encoded-value bare-value] (re-find
+                                                                                     #"(?x)
 ^(?:
   ([^=(]+)\([^)]+\)| # encoded name
   ([^=(]+) # bare name
@@ -228,12 +271,12 @@ reference: https://developer.android.com/guide/topics/manifest/manifest-intro.ht
   ([^\"(]\S*) # bare value
 )
 "
-                                              raw)]
-                                         {:type :attribute
-                                          :name (or bare-name encoded-name)
-                                          :value (or quoted-value encoded-value bare-value)})
-                                       ;; falls through
-                                       nil))))
+                                                                                     raw)]
+                                        {:type :attribute
+                                         :name (or bare-name encoded-name)
+                                         :value (or quoted-value encoded-value bare-value)})
+                                      ;; falls through
+                                      nil))))
                            (keep identity)
                            vec)))))
         pass (build lines)]
@@ -245,11 +288,14 @@ reference: https://developer.android.com/guide/topics/manifest/manifest-intro.ht
                     (let [[attrs elems] (split-with #(= (:type %) :attribute)
                                                     (:children node))]
                       {:tag (keyword (:name node))
-                       :attrs (let [attrs (into {} (map #(do [(keyword (:name %))
-                                                              (:value %)])
+                       :attrs (let [attrs (into {} (mapcat #(let [the-key (keyword (:name %))
+                                                                  the-value (:value %)]
+                                                              (when (and the-key the-value)
+                                                                [[the-key
+                                                                  the-value]]))
                                                         attrs))]
                                 (if immediate-namespace
-                                  (assoc attrs (:name immediate-namespace)
+                                  (assoc attrs (keyword (:name immediate-namespace))
                                          (:value immediate-namespace))
                                   attrs))
                        :content (set (map build elems))})                    
@@ -275,18 +321,24 @@ reference: https://developer.android.com/guide/topics/manifest/manifest-intro.ht
        set))
 
 (defn aapt-dump-xmltree
-  "aapt dump xmltree asset"
+  "aapt dump xmltree <apk> <asset>"
   [apk asset]
   (:out (sh "aapt" "dump" "xmltree"
             apk asset)))
 
 (defn aapt-dump-badging
-  "aapt dump badging apk"
+  "aapt dump badging <apk>"
   [apk]
   (:out (sh "aapt" "dump" "badging"
             apk)))
 
 (defn aapt-dump-manifest
-  "aapt dump xmltree <manifest>"
+  "aapt dump xmltree <apk> <manifest>"
   [apk]
   (aapt-dump-xmltree apk manifest))
+
+(defn aapt-dump-resources
+  "aapt dump resources <apk>"
+  [apk]
+  (:out (sh "aapt" "dump" "resources"
+            apk)))

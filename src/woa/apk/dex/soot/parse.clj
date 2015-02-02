@@ -70,7 +70,6 @@
                                             #"^java\.security"]}}
    {:keys [soot-android-jar-path
            soot-show-result
-           soot-result-include-invoke-arguments
            soot-result-exclude-app-methods
            soot-parallel-jobs
            verbose]
@@ -235,18 +234,13 @@
                                                      (.. callback getName)
                                                      type]
                                                     (->> invokes
-                                                         (map #(if soot-result-include-invoke-arguments
-                                                                 (let [{:keys [method args]} %
-                                                                       class (-> method get-soot-class)]
-                                                                   {:method (-> method get-soot-name)
-                                                                    :class (-> method get-soot-class-name)
-                                                                    :package (.. class getPackageName)
-                                                                    :args (str args)})
-                                                                 (let [method %
-                                                                       class (-> method get-soot-class)]
-                                                                   {:method (-> method get-soot-name)
-                                                                    :class (-> method get-soot-class-name)
-                                                                    :package (.. class getPackageName)})))
+                                                         (map #(let [{:keys [method args]} %
+                                                                     class (-> method
+                                                                               get-soot-class)]
+                                                                 {:method (-> method get-soot-name)
+                                                                  :class (-> method get-soot-class-name)
+                                                                  :package (.. class getPackageName)
+                                                                  :args (str args)}))
                                                          set)))
                                            ;; add explicit link between invokes and their Android API ancestor
                                            (let [path [(.. callback-class getPackageName)
@@ -255,9 +249,7 @@
                                                        (.. callback getName)
                                                        :descend]]
                                              (doseq [invoke (set/union explicit-invokes implicit-invokes)]
-                                               (let [method (if soot-result-include-invoke-arguments
-                                                              (:method invoke)
-                                                              invoke)]
+                                               (let [method (:method invoke)]
                                                  (when-not (android-api? method)
                                                    (let [method-name (-> method get-soot-name)
                                                          method-class (-> method get-soot-class)

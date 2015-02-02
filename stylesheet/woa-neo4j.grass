@@ -53,7 +53,12 @@ node.Class {
 }
 
 node.Method {
-  color: #D1C732;
+  color: #E6E197;
+  caption: '{name}';
+}
+
+node.MethodInstance {
+  color: #F7F6E6;
   caption: '{name}';
 }
 

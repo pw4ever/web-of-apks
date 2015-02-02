@@ -23,7 +23,9 @@
 
                  RefLikeType
                  ArrayType
-                 RefType)
+                 RefType
+
+                 Scene)
            
            (soot.jimple Stmt
                         StmtSwitch
@@ -139,10 +141,10 @@
   (simulator-resolve-value [const simulator]
     (.. const value)))
 
-(extend-type woa.apk.dex.soot.sexp.InstanceSexp
-  SimulatorValueResolver
-  (simulator-resolve-value [this simulator]
-    (:instance this)))
+;; (extend-type woa.apk.dex.soot.sexp.InstanceSexp
+;;   SimulatorValueResolver
+;;   (simulator-resolve-value [this simulator]
+;;     (:instance this)))
 
 ;; simulator assignment protocol
 
@@ -578,17 +580,15 @@
                                 (str "-" class-name))))]
     (make-instance-sexp class instance)))
 
-
-
 (defn- simulator-evaluate
   "evaluate expr in simulator (simulator should be an Clojure atom to allow updates)"
   [expr
    {:keys [simulator interesting-method?]
     :as simulation-params}
    {:keys [soot-method-simulation-depth-budget
-           soot-result-include-invoke-arguments
            soot-no-implicit-cf
            soot-dump-all-invokes
+           layout-callbacks
            verbose]
     :as options}]
   (let [result (atom nil)
@@ -638,50 +638,55 @@
                         (interesting-method? method))
                 (doto simulator
                   (swap! simulator-add-explicit-invokes
-                         (if soot-result-include-invoke-arguments
-                           [{:method method
-                             :args args}]
-                           [method]))))
+                         [{:method method
+                           :args args}])))
 
               (let [invoke-method (fn [method this params & [implicit?]]
-                                    (when (or soot-dump-all-invokes
-                                              (interesting-method? method))
-                                      (doto simulator
-                                        (swap! (if implicit?
-                                                 simulator-add-implicit-invokes
-                                                 simulator-add-explicit-invokes)
-                                               (if soot-result-include-invoke-arguments
-                                                 [{:method method
-                                                   :args args}]
-                                                 [method]))))
-                                    
-                                    (let [{:keys [returns
-                                                  explicit-invokes
-                                                  implicit-invokes
-                                                  component-invokes]}
-                                          (simulate-method {:method method
-                                                            :this this
-                                                            :params params
-                                                            :interesting-method?
-                                                            interesting-method?}
-                                                           (update-in options
-                                                                      [:soot-method-simulation-depth-budget]
-                                                                      dec))]
+                                    (if (instance? woa.apk.dex.soot.sexp.MethodSexp
+                                                   method)
                                       (do
                                         (doto simulator
-                                          ;; implicit is contagious
                                           (swap! (if implicit?
                                                    simulator-add-implicit-invokes
                                                    simulator-add-explicit-invokes)
-                                                 explicit-invokes)
-                                          (swap! simulator-add-implicit-invokes
-                                                 implicit-invokes)
-                                          (swap! simulator-add-component-invokes
-                                                 component-invokes))
-                                        ;; if the result is unique, extract it
-                                        (if (== 1 (count returns))
-                                          (first returns)
-                                          returns))))]
+                                                 [{:method method
+                                                   :args params}])))
+                                      (do
+                                        (when (or soot-dump-all-invokes
+                                                  (interesting-method? method))
+                                          (doto simulator
+                                            (swap! (if implicit?
+                                                     simulator-add-implicit-invokes
+                                                     simulator-add-explicit-invokes)
+                                                   [{:method method
+                                                     :args params}])))
+                                        (let [{:keys [returns
+                                                      explicit-invokes
+                                                      implicit-invokes
+                                                      component-invokes]}
+                                              (simulate-method {:method method
+                                                                :this this
+                                                                :params params
+                                                                :interesting-method?
+                                                                interesting-method?}
+                                                               (update-in options
+                                                                          [:soot-method-simulation-depth-budget]
+                                                                          dec))]
+                                          (do
+                                            (doto simulator
+                                              ;; implicit is contagious
+                                              (swap! (if implicit?
+                                                       simulator-add-implicit-invokes
+                                                       simulator-add-explicit-invokes)
+                                                     explicit-invokes)
+                                              (swap! simulator-add-implicit-invokes
+                                                     implicit-invokes)
+                                              (swap! simulator-add-component-invokes
+                                                     component-invokes))
+                                            ;; if the result is unique, extract it
+                                            (if (== 1 (count returns))
+                                              (first returns)
+                                              returns))))))]
                 (cond
                   
                   ;; safe invokes
@@ -709,6 +714,39 @@
                     (catch Exception e
                       (invoke-method method base-value args)))
 
+                  ;; setContentView
+                  (= method-name "setContentView")
+                  (let [layout-id (first args)]
+                    (cond
+                      (number? layout-id)
+                      (doseq [{:keys [method]
+                               :as layout-callback}
+                              (get layout-callbacks layout-id)]
+                        (when layout-callback
+                          (let [info (dissoc layout-callback :method)]
+                            (try
+                              (when-let [the-method (.. method-class
+                                                        (getMethodByNameUnsafe method))]
+                                (invoke-method the-method base-value [info]))
+                              (catch Exception e
+                                (print-stack-trace-if-verbose e verbose))))))))
+
+                  ;; special-invokes
+                  (= invoke-type :special-invoke)
+                  (try
+                    (cond
+                      ;; Runnable is the one to be run
+                      (and (transitive-ancestor? "java.lang.Thread" method-class)
+                           (first args))
+                      (simulator-assign base (first args) simulator)
+
+                      :otherwise
+                      (simulator-assign base
+                                        (simulator-new-instance method-class)
+                                        simulator))
+                    (catch Exception e
+                      (print-stack-trace e)))
+
                   ;; implicit cf: task
                   (and (not soot-no-implicit-cf)
                        (implicit-cf-task? method))
@@ -717,13 +755,22 @@
                                                get-implicit-cf-root-class-names
                                                first)
                           x [root-class-name method-name]]
+                      (when (and verbose (> verbose 3))
+                        (println "implicit cf:" x base-value args))
                       (cond
                         (#{["java.lang.Thread" "start"]
                            ["java.lang.Runnable" "run"]}
                          x)
-                        (when-let [implicit-target (.. method-class
-                                                       (getMethodByNameUnsafe "run"))]
-                          (invoke-method implicit-target base-value [] true))
+                        (do
+                          (when-let [implicit-target (.. (:class base-value)
+                                                         (getMethodByNameUnsafe "run"))]
+                            (when (and verbose (> verbose 3))
+                              (println (format "%1$s.%2$s:"
+                                               root-class-name method-name)
+                                       method-class
+                                       base-value
+                                       implicit-target))
+                            (invoke-method implicit-target base-value [] true)))
 
                         (#{["java.util.concurrent.Callable" "call"]}
                          x)
@@ -775,21 +822,57 @@
                          x)
                         (let [target-obj (first args)]
                           (try
-                            (.. (-> base-value get-soot-class)
-                                (getMethodByNameUnsafe (str target-obj)))
+                            ;; there could be more than one such method
+                            (let [candidates (->> (.. (-> base-value get-soot-class)
+                                                      (getMethods))
+                                                  (filter #(let [method %
+                                                                 target-name (str target-obj)]
+                                                             (= target-name
+                                                                (.. method getName)))))]
+                              (if-not (empty? candidates)
+                                candidates
+                                (make-method-sexp base-value target-obj))) 
                             (catch Exception e
                               (make-method-sexp base-value target-obj))))
 
                         (#{["java.lang.reflect.Method" "invoke"]}
                          x)
                         (try
-                          (when (and verbose (> verbose 3))
-                            (println "java.lang.reflect.Method.invoke:" base-value args))
-                          (if (.. base-value isStatic)
-                            (invoke-method base-value nil args true)
-                            (invoke-method base-value (first args) (vec (rest args)) true))
+                          (let [result (atom #{})]
+                            (if-not (instance? woa.apk.dex.soot.sexp.Sexp
+                                               base-value)
+                              ;; try candidates
+                              (doseq [method base-value]
+                                (let [invoke-instance (first args)
+                                      invoke-args (second args)]
+                                  (when (= (count invoke-args)
+                                           (.. method getParameterCount))
+                                    (when (and verbose (> verbose 3))
+                                      (println (format "%1$s.%2$s:"
+                                                       root-class-name method-name)
+                                               method
+                                               invoke-instance
+                                               invoke-args))                                  
+                                    (when-let [r (try
+                                                   (invoke-method method
+                                                                  invoke-instance
+                                                                  invoke-args
+                                                                  true)
+                                                   (catch Exception e))]
+                                      (swap! result conj r)))))
+                              ;; otherwise, MethodSexp
+                              (do
+                                (doto simulator
+                                  (swap! simulator-add-implicit-invokes
+                                         [{:method base-value
+                                           :args (second args)}]))
+                                (swap! result conj
+                                       (make-invoke-sexp :reflect base-value
+                                                         (first args) (vec (second args))))))
+                            (first result))
                           (catch Exception e
-                            (make-invoke-sexp :reflect base-value (first args) (vec (rest args)))))
+                            (make-invoke-sexp :reflect base-value
+                                              (first args) (vec (second args)))))
                         
                         (#{["java.lang.Class" "getField"]}
                          x)

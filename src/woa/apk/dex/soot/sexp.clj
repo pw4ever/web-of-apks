@@ -67,14 +67,28 @@
   (ClassSexp. class))
 
 (defrecord MethodSexp [instance method]
-  Sexp)
+  Sexp
+  SootQuery
+  (get-soot-class [this]
+    (get-soot-class (:instance this)))
+  (get-soot-class-name [this]
+    (get-soot-class-name (:instance this)))
+  (get-soot-name [this]
+    (get-soot-name (:method this))))
 
 (defn make-method-sexp
   [instance method]
   (MethodSexp. instance method))
 
 (defrecord FieldSexp [instance field]
-  Sexp)
+  Sexp
+  SootQuery
+  (get-soot-class [this]
+    (get-soot-class (:instance this)))
+  (get-soot-class-name [this]
+    (get-soot-class-name (:instance this)))
+  (get-soot-name [this]
+    (get-soot-name (:field this))))
 
 (defn make-field-sexp
   [instance field]

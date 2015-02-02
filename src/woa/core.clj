@@ -81,11 +81,10 @@
     :validate [#(> % 0)
                (format "You need at least 1 job to proceed")]]
    [nil "--soot-show-result" "show APK analysis result"]
-   [nil "--soot-result-include-invoke-arguments" "include invoke arguments (for comparison)"]
+   
    [nil "--soot-no-implicit-cf" "do not detect implicit control flows (for comparison)"]
    [nil "--soot-dump-all-invokes" "dump all invokes"]
    [nil "--soot-result-exclude-app-methods" "exclude app internal methods from the result"]
-
    [nil "--dump-soot-model FILE" "dump Soot model to FILE"]
    [nil "--load-soot-model FILE" "load Soot model from FILE"]
 
@@ -154,9 +153,13 @@
         (when dump-manifest
           (print (aapt-parse/get-manifest-xml file-path))
           (flush))
-        
+
         (when soot-task-build-model
-          (let [apk (soot-parse/parse-apk file-path options)]
+          (let [apk (soot-parse/parse-apk file-path
+                                          (merge options
+                                                 ;; piggyback layout-callbacks on options
+                                                 {:layout-callbacks
+                                                  (aapt-parse/get-layout-callbacks file-path)}))]
             (when dump-soot-model
               (with-open [model-io (io/writer dump-soot-model :append true)]
                 (binding [*out* model-io]

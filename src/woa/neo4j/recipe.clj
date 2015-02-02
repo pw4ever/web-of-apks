@@ -39,9 +39,10 @@
              "-[:CONTAIN]-> (dex:Dex)"
              "-[:CONTAIN]-> (class:Class)"
              "-[:CONTAIN]-> (callback:Callback)"
+             "OPTIONAL MATCH (callback) -[:INVOKE]-> (invoke)"
              "OPTIONAL MATCH (explicitInvoke) <-[:EXPLICIT_INVOKE]- (callback) -[:IMPLICIT_INVOKE]-> (implicitInvoke)"
              (if return?
-               "RETURN signingKey, apk, dex, class, callback, explicitInvoke, implicitInvoke"
+               "RETURN signingKey, apk, dex, class, callback, invoke, explicitInvoke, implicitInvoke"
                "")]))
 
 (defn get-app-by-class-complexity

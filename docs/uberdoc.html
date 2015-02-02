@@ -2880,13 +2880,14 @@ net.brehaut.ClojureTools = (function (SH) {
   ;; special libs
   (:require [clojure.java.shell :as shell :refer [sh]]))</pre></td></tr><tr><td class="docs">
 </td><td class="codes"><pre class="brush: clojure">(def manifest &quot;AndroidManifest.xml&quot;)</pre></td></tr><tr><td class="docs"><p>porcelain</p>
-</td><td class="codes"><pre class="brush: clojure">(declare get-badging get-manifest)
+</td><td class="codes"><pre class="brush: clojure">(declare get-badging get-manifest get-layout-callbacks)
 (declare decompile-xml get-manifest-xml)</pre></td></tr><tr><td class="docs"><p>plumbing</p>
 </td><td class="codes"><pre class="brush: clojure">(declare parse-aapt-xmltree
          get-nodes-from-parsed-xmltree)
 (declare aapt-dump-xmltree
          aapt-dump-badging
-         aapt-dump-manifest)</pre></td></tr><tr><td class="docs"><p>get badging in Clojure data structure</p>
+         aapt-dump-manifest
+         aapt-dump-resources)</pre></td></tr><tr><td class="docs"><p>get badging in Clojure data structure</p>
 </td><td class="codes"><pre class="brush: clojure">(defn get-badging
   [apk]
   (let [result (atom {})
@@ -2981,7 +2982,46 @@ net.brehaut.ClojureTools = (function (SH) {
                                         [:action :category]))})
                           (get-nodes-from-parsed-xmltree parsed-manifest
                                                          [:manifest :application node]))))))
-    @result))</pre></td></tr><tr><td class="docs"><p>get manifest in XML format</p>
+    @result))</pre></td></tr><tr><td class="docs"><p>return layout id and their callbacks' class.method</p>
+</td><td class="codes"><pre class="brush: clojure">(defn get-layout-callbacks
+  [apk]
+  (-&gt;&gt; (for [[_ layout-id _1 layout-name]
+             (re-seq #&quot;(?x)
+spec\s+resource\s+
+0x([0-9a-fA-F]+)\s+
+([^:]+):layout/([^:]+):
+&quot;
+                     (aapt-dump-resources apk))]
+         [(Long/parseLong layout-id 16)
+          (let [xml-res-name (str &quot;res/layout/&quot;
+                                  layout-name
+                                  &quot;.xml&quot;)
+                the-xml (parse-aapt-xmltree (aapt-dump-xmltree apk
+                                                               xml-res-name))
+                callbacks (atom #{})]
+            (loop [worklist the-xml]
+              (when (and worklist
+                         (not (empty? worklist)))
+                (let [new-worklist (atom #{})]
+                  (doseq [{:keys [tag attrs content]
+                           :as work} worklist]
+                    (let [attr-keys (keys attrs)
+                          callback-keys (filter #(let [key-name (name %)]
+                                                   (re-matches #&quot;android:on.+&quot;
+                                                               key-name))
+                                                attr-keys)
+                          info (select-keys attrs
+                                            (set/difference (set attr-keys)
+                                                            (set callback-keys)))]
+                      (doseq [callback-key callback-keys]
+                        (swap! callbacks conj
+                               (merge info
+                                      {:view-type (name tag)
+                                       :method (get attrs callback-key)}))))
+                    (swap! new-worklist into content))
+                  (recur @new-worklist))))
+            @callbacks)])
+       (into {})))</pre></td></tr><tr><td class="docs"><p>get manifest in XML format</p>
 </td><td class="codes"><pre class="brush: clojure">(defn get-manifest-xml
   [apk]
   (decompile-xml apk manifest))</pre></td></tr><tr><td class="docs"><p>decompile the binary xml on PATH in APK</p>
@@ -3045,32 +3085,32 @@ net.brehaut.ClojureTools = (function (SH) {
                                         (range (dec (count segment-indexes))))]
                       (-&gt;&gt; segments
                            (map (fn [lines]
-                                   (let [line (first lines)
-                                         lines (rest lines)
-                                         type (:type line)
-                                         raw (:raw line)]
-                                     (case type
-                                       ;; Namespace
-                                       &quot;N&quot;
-                                       (let [[_ n v] (re-find #&quot;^([^=]+)=([^=]+)$&quot; raw)]
-                                         {:type :namespace
-                                          :name (str &quot;xmlns:&quot; n)
-                                          :value v
-                                          :children (build lines)}) 
-                                       ;; Element
-                                       &quot;E&quot;
-                                       (let [[_ name line] (re-find #&quot;^(\S+)\s+\(line=(\d+)\)$&quot;
-                                                                    raw)]
-                                         {:type :element
-                                          :name name
-                                          :line line
-                                          :children (build lines)})
-                                       ;; Attribute
-                                       &quot;A&quot;
-                                       (let [[_
-                                              encoded-name bare-name
-                                              quoted-value encoded-value bare-value] (re-find
-                                              #&quot;(?x)
+                                  (let [line (first lines)
+                                        lines (rest lines)
+                                        type (:type line)
+                                        raw (:raw line)]
+                                    (case type
+                                      ;; Namespace
+                                      &quot;N&quot;
+                                      (let [[_ n v] (re-find #&quot;^([^=]+)=([^=]+)$&quot; raw)]
+                                        {:type :namespace
+                                         :name (str &quot;xmlns:&quot; n)
+                                         :value v
+                                         :children (build lines)}) 
+                                      ;; Element
+                                      &quot;E&quot;
+                                      (let [[_ name line] (re-find #&quot;^(\S+)\s+\(line=(\d+)\)$&quot;
+                                                                   raw)]
+                                        {:type :element
+                                         :name name
+                                         :line line
+                                         :children (build lines)})
+                                      ;; Attribute
+                                      &quot;A&quot;
+                                      (let [[_
+                                             encoded-name bare-name
+                                             quoted-value encoded-value bare-value] (re-find
+                                                                                     #&quot;(?x)
 ^(?:
   ([^=(]+)\([^)]+\)| # encoded name
   ([^=(]+) # bare name)
@@ -3080,12 +3120,12 @@ net.brehaut.ClojureTools = (function (SH) {
   \([^)]+\)(\S+)|  # encoded value
   ([^\&quot;(]\S*) # bare value)
 &quot;
-                                              raw)]
-                                         {:type :attribute
-                                          :name (or bare-name encoded-name)
-                                          :value (or quoted-value encoded-value bare-value)})
-                                       ;; falls through
-                                       nil))))
+                                                                                     raw)]
+                                        {:type :attribute
+                                         :name (or bare-name encoded-name)
+                                         :value (or quoted-value encoded-value bare-value)})
+                                      ;; falls through
+                                      nil))))
                            (keep identity)
                            vec)))))
         pass (build lines)]
@@ -3097,11 +3137,14 @@ net.brehaut.ClojureTools = (function (SH) {
                     (let [[attrs elems] (split-with #(= (:type %) :attribute)
                                                     (:children node))]
                       {:tag (keyword (:name node))
-                       :attrs (let [attrs (into {} (map #(do [(keyword (:name %))
-                                                              (:value %)])
+                       :attrs (let [attrs (into {} (mapcat #(let [the-key (keyword (:name %))
+                                                                  the-value (:value %)]
+                                                              (when (and the-key the-value)
+                                                                [[the-key
+                                                                  the-value]]))
                                                         attrs))]
                                 (if immediate-namespace
-                                  (assoc attrs (:name immediate-namespace)
+                                  (assoc attrs (keyword (:name immediate-namespace))
                                          (:value immediate-namespace))
                                   attrs))
                        :content (set (map build elems))})                    
@@ -3122,18 +3165,22 @@ net.brehaut.ClojureTools = (function (SH) {
                                                     more-tags)
                     nodes)
             nodes)))
-       set))</pre></td></tr><tr><td class="docs"><p>aapt dump xmltree asset</p>
+       set))</pre></td></tr><tr><td class="docs"><p>aapt dump xmltree <apk> <asset></p>
 </td><td class="codes"><pre class="brush: clojure">(defn aapt-dump-xmltree
   [apk asset]
   (:out (sh &quot;aapt&quot; &quot;dump&quot; &quot;xmltree&quot;
-            apk asset)))</pre></td></tr><tr><td class="docs"><p>aapt dump badging apk</p>
+            apk asset)))</pre></td></tr><tr><td class="docs"><p>aapt dump badging <apk></p>
 </td><td class="codes"><pre class="brush: clojure">(defn aapt-dump-badging
   [apk]
   (:out (sh &quot;aapt&quot; &quot;dump&quot; &quot;badging&quot;
-            apk)))</pre></td></tr><tr><td class="docs"><p>aapt dump xmltree <manifest></p>
+            apk)))</pre></td></tr><tr><td class="docs"><p>aapt dump xmltree <apk> <manifest></p>
 </td><td class="codes"><pre class="brush: clojure">(defn aapt-dump-manifest
   [apk]
-  (aapt-dump-xmltree apk manifest))</pre></td></tr><tr><td class="spacer docs">&nbsp;</td><td class="codes" /></tr><tr><td class="docs"><div class="docs-header"><a class="anchor" href="#woa.apk.dex.asmdex.opcodes" name="woa.apk.dex.asmdex.opcodes"><h1 class="project-name">woa.apk.dex.asmdex.opcodes</h1><a class="toc-link" href="#toc">toc</a></a></div></td><td class="codes" /></tr><tr><td class="docs">
+  (aapt-dump-xmltree apk manifest))</pre></td></tr><tr><td class="docs"><p>aapt dump resources <apk></p>
+</td><td class="codes"><pre class="brush: clojure">(defn aapt-dump-resources
+  [apk]
+  (:out (sh &quot;aapt&quot; &quot;dump&quot; &quot;resources&quot;
+            apk)))</pre></td></tr><tr><td class="spacer docs">&nbsp;</td><td class="codes" /></tr><tr><td class="docs"><div class="docs-header"><a class="anchor" href="#woa.apk.dex.asmdex.opcodes" name="woa.apk.dex.asmdex.opcodes"><h1 class="project-name">woa.apk.dex.asmdex.opcodes</h1><a class="toc-link" href="#toc">toc</a></a></div></td><td class="codes" /></tr><tr><td class="docs">
 </td><td class="codes"><pre class="brush: clojure">(ns woa.apk.dex.asmdex.opcodes
   ;; common libs
   (:require [clojure.string :as str]
@@ -3635,7 +3682,6 @@ net.brehaut.ClojureTools = (function (SH) {
                                             #&quot;^java\.security&quot;]}}
    {:keys [soot-android-jar-path
            soot-show-result
-           soot-result-include-invoke-arguments
            soot-result-exclude-app-methods
            soot-parallel-jobs
            verbose]
@@ -3786,18 +3832,13 @@ net.brehaut.ClojureTools = (function (SH) {
                                                      (.. callback getName)
                                                      type]
                                                     (-&gt;&gt; invokes
-                                                         (map #(if soot-result-include-invoke-arguments
-                                                                 (let [{:keys [method args]} %
-                                                                       class (-&gt; method get-soot-class)]
-                                                                   {:method (-&gt; method get-soot-name)
-                                                                    :class (-&gt; method get-soot-class-name)
-                                                                    :package (.. class getPackageName)
-                                                                    :args (str args)})
-                                                                 (let [method %
-                                                                       class (-&gt; method get-soot-class)]
-                                                                   {:method (-&gt; method get-soot-name)
-                                                                    :class (-&gt; method get-soot-class-name)
-                                                                    :package (.. class getPackageName)})))
+                                                         (map #(let [{:keys [method args]} %
+                                                                     class (-&gt; method
+                                                                               get-soot-class)]
+                                                                 {:method (-&gt; method get-soot-name)
+                                                                  :class (-&gt; method get-soot-class-name)
+                                                                  :package (.. class getPackageName)
+                                                                  :args (str args)}))
                                                          set)))
                                            ;; add explicit link between invokes and their Android API ancestor
                                            (let [path [(.. callback-class getPackageName)
@@ -3806,9 +3847,7 @@ net.brehaut.ClojureTools = (function (SH) {
                                                        (.. callback getName)
                                                        :descend]]
                                              (doseq [invoke (set/union explicit-invokes implicit-invokes)]
-                                               (let [method (if soot-result-include-invoke-arguments
-                                                              (:method invoke)
-                                                              invoke)]
+                                               (let [method (:method invoke)]
                                                  (when-not (android-api? method)
                                                    (let [method-name (-&gt; method get-soot-name)
                                                          method-class (-&gt; method get-soot-class)
@@ -3905,12 +3944,26 @@ net.brehaut.ClojureTools = (function (SH) {
   [class]
   (ClassSexp. class))</pre></td></tr><tr><td class="docs">
 </td><td class="codes"><pre class="brush: clojure">(defrecord MethodSexp [instance method]
-  Sexp)</pre></td></tr><tr><td class="docs">
+  Sexp
+  SootQuery
+  (get-soot-class [this]
+    (get-soot-class (:instance this)))
+  (get-soot-class-name [this]
+    (get-soot-class-name (:instance this)))
+  (get-soot-name [this]
+    (get-soot-name (:method this))))</pre></td></tr><tr><td class="docs">
 </td><td class="codes"><pre class="brush: clojure">(defn make-method-sexp
   [instance method]
   (MethodSexp. instance method))</pre></td></tr><tr><td class="docs">
 </td><td class="codes"><pre class="brush: clojure">(defrecord FieldSexp [instance field]
-  Sexp)</pre></td></tr><tr><td class="docs">
+  Sexp
+  SootQuery
+  (get-soot-class [this]
+    (get-soot-class (:instance this)))
+  (get-soot-class-name [this]
+    (get-soot-class-name (:instance this)))
+  (get-soot-name [this]
+    (get-soot-name (:field this))))</pre></td></tr><tr><td class="docs">
 </td><td class="codes"><pre class="brush: clojure">(defn make-field-sexp
   [instance field]
   (FieldSexp. instance field))</pre></td></tr><tr><td class="docs">
@@ -3962,7 +4015,8 @@ net.brehaut.ClojureTools = (function (SH) {
                  Local
                  RefLikeType
                  ArrayType
-                 RefType)
+                 RefType
+                 Scene)
            (soot.jimple Stmt
                         StmtSwitch
                         JimpleValueSwitch)))</pre></td></tr><tr><td class="docs"><p>declaration</p>
@@ -4055,11 +4109,11 @@ net.brehaut.ClojureTools = (function (SH) {
 </td><td class="codes"><pre class="brush: clojure">(extend-type soot.jimple.Constant
   SimulatorValueResolver
   (simulator-resolve-value [const simulator]
-    (.. const value)))</pre></td></tr><tr><td class="docs">
-</td><td class="codes"><pre class="brush: clojure">(extend-type woa.apk.dex.soot.sexp.InstanceSexp
+    (.. const value)))</pre></td></tr><tr><td class="docs"><p>(extend-type woa.apk.dex.soot.sexp.InstanceSexp
   SimulatorValueResolver
   (simulator-resolve-value [this simulator]
-    (:instance this)))</pre></td></tr><tr><td class="docs"><p>simulator assignment protocol</p>
+    (:instance this)))</p>
+</td><td class="codes"></td></tr><tr><td class="docs"><p>simulator assignment protocol</p>
 </td><td class="codes"></td></tr><tr><td class="docs"><p>simulator should be an atom to have persistent effect</p>
 </td><td class="codes"><pre class="brush: clojure">(defprotocol SimulatorAssignment
   (simulator-assign [target value simulator]))</pre></td></tr><tr><td class="docs">
@@ -4456,9 +4510,9 @@ net.brehaut.ClojureTools = (function (SH) {
    {:keys [simulator interesting-method?]
     :as simulation-params}
    {:keys [soot-method-simulation-depth-budget
-           soot-result-include-invoke-arguments
            soot-no-implicit-cf
            soot-dump-all-invokes
+           layout-callbacks
            verbose]
     :as options}]
   (let [result (atom nil)
@@ -4503,48 +4557,54 @@ net.brehaut.ClojureTools = (function (SH) {
                         (interesting-method? method))
                 (doto simulator
                   (swap! simulator-add-explicit-invokes
-                         (if soot-result-include-invoke-arguments
-                           [{:method method
-                             :args args}]
-                           [method]))))
+                         [{:method method
+                           :args args}])))
               (let [invoke-method (fn [method this params &amp; [implicit?]]
-                                    (when (or soot-dump-all-invokes
-                                              (interesting-method? method))
-                                      (doto simulator
-                                        (swap! (if implicit?
-                                                 simulator-add-implicit-invokes
-                                                 simulator-add-explicit-invokes)
-                                               (if soot-result-include-invoke-arguments
-                                                 [{:method method
-                                                   :args args}]
-                                                 [method]))))
-                                    (let [{:keys [returns
-                                                  explicit-invokes
-                                                  implicit-invokes
-                                                  component-invokes]}
-                                          (simulate-method {:method method
-                                                            :this this
-                                                            :params params
-                                                            :interesting-method?
-                                                            interesting-method?}
-                                                           (update-in options
-                                                                      [:soot-method-simulation-depth-budget]
-                                                                      dec))]
+                                    (if (instance? woa.apk.dex.soot.sexp.MethodSexp
+                                                   method)
                                       (do
                                         (doto simulator
-                                          ;; implicit is contagious
                                           (swap! (if implicit?
                                                    simulator-add-implicit-invokes
                                                    simulator-add-explicit-invokes)
-                                                 explicit-invokes)
-                                          (swap! simulator-add-implicit-invokes
-                                                 implicit-invokes)
-                                          (swap! simulator-add-component-invokes
-                                                 component-invokes))
-                                        ;; if the result is unique, extract it
-                                        (if (== 1 (count returns))
-                                          (first returns)
-                                          returns))))]
+                                                 [{:method method
+                                                   :args params}])))
+                                      (do
+                                        (when (or soot-dump-all-invokes
+                                                  (interesting-method? method))
+                                          (doto simulator
+                                            (swap! (if implicit?
+                                                     simulator-add-implicit-invokes
+                                                     simulator-add-explicit-invokes)
+                                                   [{:method method
+                                                     :args params}])))
+                                        (let [{:keys [returns
+                                                      explicit-invokes
+                                                      implicit-invokes
+                                                      component-invokes]}
+                                              (simulate-method {:method method
+                                                                :this this
+                                                                :params params
+                                                                :interesting-method?
+                                                                interesting-method?}
+                                                               (update-in options
+                                                                          [:soot-method-simulation-depth-budget]
+                                                                          dec))]
+                                          (do
+                                            (doto simulator
+                                              ;; implicit is contagious
+                                              (swap! (if implicit?
+                                                       simulator-add-implicit-invokes
+                                                       simulator-add-explicit-invokes)
+                                                     explicit-invokes)
+                                              (swap! simulator-add-implicit-invokes
+                                                     implicit-invokes)
+                                              (swap! simulator-add-component-invokes
+                                                     component-invokes))
+                                            ;; if the result is unique, extract it
+                                            (if (== 1 (count returns))
+                                              (first returns)
+                                              returns))))))]
                 (cond
                   ;; safe invokes
                   (let [t (get safe-invokes class-name)]
@@ -4568,6 +4628,36 @@ net.brehaut.ClojureTools = (function (SH) {
                             (invoke base-value args))))
                     (catch Exception e
                       (invoke-method method base-value args)))
+                  ;; setContentView
+                  (= method-name &quot;setContentView&quot;)
+                  (let [layout-id (first args)]
+                    (cond
+                      (number? layout-id)
+                      (doseq [{:keys [method]
+                               :as layout-callback}
+                              (get layout-callbacks layout-id)]
+                        (when layout-callback
+                          (let [info (dissoc layout-callback :method)]
+                            (try
+                              (when-let [the-method (.. method-class
+                                                        (getMethodByNameUnsafe method))]
+                                (invoke-method the-method base-value [info]))
+                              (catch Exception e
+                                (print-stack-trace-if-verbose e verbose))))))))
+                  ;; special-invokes
+                  (= invoke-type :special-invoke)
+                  (try
+                    (cond
+                      ;; Runnable is the one to be run
+                      (and (transitive-ancestor? &quot;java.lang.Thread&quot; method-class)
+                           (first args))
+                      (simulator-assign base (first args) simulator)
+                      :otherwise
+                      (simulator-assign base
+                                        (simulator-new-instance method-class)
+                                        simulator))
+                    (catch Exception e
+                      (print-stack-trace e)))
                   ;; implicit cf: task
                   (and (not soot-no-implicit-cf)
                        (implicit-cf-task? method))
@@ -4576,13 +4666,22 @@ net.brehaut.ClojureTools = (function (SH) {
                                                get-implicit-cf-root-class-names
                                                first)
                           x [root-class-name method-name]]
+                      (when (and verbose (&gt; verbose 3))
+                        (println &quot;implicit cf:&quot; x base-value args))
                       (cond
                         (#{[&quot;java.lang.Thread&quot; &quot;start&quot;]
                            [&quot;java.lang.Runnable&quot; &quot;run&quot;]}
                          x)
-                        (when-let [implicit-target (.. method-class
-                                                       (getMethodByNameUnsafe &quot;run&quot;))]
-                          (invoke-method implicit-target base-value [] true))
+                        (do
+                          (when-let [implicit-target (.. (:class base-value)
+                                                         (getMethodByNameUnsafe &quot;run&quot;))]
+                            (when (and verbose (&gt; verbose 3))
+                              (println (format &quot;%1$s.%2$s:&quot;
+                                               root-class-name method-name)
+                                       method-class
+                                       base-value
+                                       implicit-target))
+                            (invoke-method implicit-target base-value [] true)))
                         (#{[&quot;java.util.concurrent.Callable&quot; &quot;call&quot;]}
                          x)
                         (when-let [implicit-target (.. method-class
@@ -4628,20 +4727,56 @@ net.brehaut.ClojureTools = (function (SH) {
                          x)
                         (let [target-obj (first args)]
                           (try
-                            (.. (-&gt; base-value get-soot-class)
-                                (getMethodByNameUnsafe (str target-obj)))
+                            ;; there could be more than one such method
+                            (let [candidates (-&gt;&gt; (.. (-&gt; base-value get-soot-class)
+                                                      (getMethods))
+                                                  (filter #(let [method %
+                                                                 target-name (str target-obj)]
+                                                             (= target-name
+                                                                (.. method getName)))))]
+                              (if-not (empty? candidates)
+                                candidates
+                                (make-method-sexp base-value target-obj))) 
                             (catch Exception e
                               (make-method-sexp base-value target-obj))))
                         (#{[&quot;java.lang.reflect.Method&quot; &quot;invoke&quot;]}
                          x)
                         (try
-                          (when (and verbose (&gt; verbose 3))
-                            (println &quot;java.lang.reflect.Method.invoke:&quot; base-value args))
-                          (if (.. base-value isStatic)
-                            (invoke-method base-value nil args true)
-                            (invoke-method base-value (first args) (vec (rest args)) true))
+                          (let [result (atom #{})]
+                            (if-not (instance? woa.apk.dex.soot.sexp.Sexp
+                                               base-value)
+                              ;; try candidates
+                              (doseq [method base-value]
+                                (let [invoke-instance (first args)
+                                      invoke-args (second args)]
+                                  (when (= (count invoke-args)
+                                           (.. method getParameterCount))
+                                    (when (and verbose (&gt; verbose 3))
+                                      (println (format &quot;%1$s.%2$s:&quot;
+                                                       root-class-name method-name)
+                                               method
+                                               invoke-instance
+                                               invoke-args))                                  
+                                    (when-let [r (try
+                                                   (invoke-method method
+                                                                  invoke-instance
+                                                                  invoke-args
+                                                                  true)
+                                                   (catch Exception e))]
+                                      (swap! result conj r)))))
+                              ;; otherwise, MethodSexp
+                              (do
+                                (doto simulator
+                                  (swap! simulator-add-implicit-invokes
+                                         [{:method base-value
+                                           :args (second args)}]))
+                                (swap! result conj
+                                       (make-invoke-sexp :reflect base-value
+                                                         (first args) (vec (second args))))))
+                            (first result))
                           (catch Exception e
-                            (make-invoke-sexp :reflect base-value (first args) (vec (rest args)))))
+                            (make-invoke-sexp :reflect base-value
+                                              (first args) (vec (second args)))))
                         (#{[&quot;java.lang.Class&quot; &quot;getField&quot;]}
                          x)
                         (let [target-obj (first args)]
@@ -5689,7 +5824,6 @@ net.brehaut.ClojureTools = (function (SH) {
     :validate [#(&gt; % 0)
                (format &quot;You need at least 1 job to proceed&quot;)]]
    [nil &quot;--soot-show-result&quot; &quot;show APK analysis result&quot;]
-   [nil &quot;--soot-result-include-invoke-arguments&quot; &quot;include invoke arguments (for comparison)&quot;]
    [nil &quot;--soot-no-implicit-cf&quot; &quot;do not detect implicit control flows (for comparison)&quot;]
    [nil &quot;--soot-dump-all-invokes&quot; &quot;dump all invokes&quot;]
    [nil &quot;--soot-result-exclude-app-methods&quot; &quot;exclude app internal methods from the result&quot;]
@@ -5743,7 +5877,11 @@ net.brehaut.ClojureTools = (function (SH) {
           (print (aapt-parse/get-manifest-xml file-path))
           (flush))
         (when soot-task-build-model
-          (let [apk (soot-parse/parse-apk file-path options)]
+          (let [apk (soot-parse/parse-apk file-path
+                                          (merge options
+                                                 ;; piggyback layout-callbacks on options
+                                                 {:layout-callbacks
+                                                  (aapt-parse/get-layout-callbacks file-path)}))]
             (when dump-soot-model
               (with-open [model-io (io/writer dump-soot-model :append true)]
                 (binding [*out* model-io]
@@ -6083,11 +6221,12 @@ net.brehaut.ClojureTools = (function (SH) {
                                     &quot;MERGE (callback:Method:Callback {name:{callbackname}})&quot;
                                     &quot;MERGE (invokepackage:Package {name:{invokepackagename}})&quot;
                                     &quot;MERGE (invokeclass:Class {name:{invokeclassname}})&quot;
-                                    (if args
-                                      &quot;MERGE (invoke:Method {name:{invokename},args:{args}})&quot;
-                                      &quot;MERGE (invoke:Method {name:{invokename}})&quot;)
+                                    &quot;MERGE (invoke:Method {name:{invokename}})&quot;
+                                    &quot;MERGE (invokeinst:MethodInstance {name:{invokename},args:{args}})&quot;
+                                    &quot;MERGE (invoke)&lt;-[:INSTANCE_OF]-(invokeinst)&quot;
                                     &quot;MERGE (invokepackage)-[:CONTAIN]-&gt;(invokeclass)-[:CONTAIN]-&gt;(invoke)&quot;
-                                    &quot;MERGE (callback)-[:EXPLICIT_INVOKE]-&gt;(invoke)&quot;
+                                    &quot;MERGE (callback)-[:INVOKE]-&gt;(invoke)&quot;
+                                    &quot;MERGE (callback)-[:EXPLICIT_INVOKE]-&gt;(invokeinst)&quot;
                                     ;; to quickly find Apk from Method
                                     &quot;MERGE (apk)&lt;-[:INVOKED_BY]-(invoke)&quot;
                                     ])
@@ -6114,11 +6253,12 @@ net.brehaut.ClojureTools = (function (SH) {
                                     &quot;MERGE (callback:Method:Callback {name:{callbackname}})&quot;
                                     &quot;MERGE (invokepackage:Package {name:{invokepackagename}})&quot;
                                     &quot;MERGE (invokeclass:Class {name:{invokeclassname}})&quot;
-                                    (if args
-                                      &quot;MERGE (invoke:Method {name:{invokename},args:{args}})&quot;
-                                      &quot;MERGE (invoke:Method {name:{invokename}})&quot;)
+                                    &quot;MERGE (invoke:Method {name:{invokename}})&quot;
+                                    &quot;MERGE (invokeinst:MethodInstance {name:{invokename},args:{args}})&quot;
+                                    &quot;MERGE (invoke)&lt;-[:INSTANCE_OF]-(invokeinst)&quot;
                                     &quot;MERGE (invokepackage)-[:CONTAIN]-&gt;(invokeclass)-[:CONTAIN]-&gt;(invoke)&quot;
-                                    &quot;MERGE (callback)-[:IMPLICIT_INVOKE]-&gt;(invoke)&quot;
+                                    &quot;MERGE (callback)-[:INVOKE]-&gt;(invoke)&quot;
+                                    &quot;MERGE (callback)-[:IMPLICIT_INVOKE]-&gt;(invokeinst)&quot;
                                     ;; to quickly find Apk from Method
                                     &quot;MERGE (apk)&lt;-[:INVOKED_BY]-(invoke)&quot;
                                     ])
@@ -6340,9 +6480,10 @@ net.brehaut.ClojureTools = (function (SH) {
              &quot;-[:CONTAIN]-&gt; (dex:Dex)&quot;
              &quot;-[:CONTAIN]-&gt; (class:Class)&quot;
              &quot;-[:CONTAIN]-&gt; (callback:Callback)&quot;
+             &quot;OPTIONAL MATCH (callback) -[:INVOKE]-&gt; (invoke)&quot;
              &quot;OPTIONAL MATCH (explicitInvoke) &lt;-[:EXPLICIT_INVOKE]- (callback) -[:IMPLICIT_INVOKE]-&gt; (implicitInvoke)&quot;
              (if return?
-               &quot;RETURN signingKey, apk, dex, class, callback, explicitInvoke, implicitInvoke&quot;
+               &quot;RETURN signingKey, apk, dex, class, callback, invoke, explicitInvoke, implicitInvoke&quot;
                &quot;&quot;)]))</pre></td></tr><tr><td class="docs"><p>sort apps by how many component classes they have</p>
 </td><td class="codes"><pre class="brush: clojure">(defn get-app-by-class-complexity
   [&amp;

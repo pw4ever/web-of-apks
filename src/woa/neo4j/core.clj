@@ -138,12 +138,12 @@
                                     "MERGE (callback:Method:Callback {name:{callbackname}})"
                                     "MERGE (invokepackage:Package {name:{invokepackagename}})"
                                     "MERGE (invokeclass:Class {name:{invokeclassname}})"
-                                    (if args
-                                      "MERGE (invoke:Method {name:{invokename},args:{args}})"
-                                      "MERGE (invoke:Method {name:{invokename}})")
-                                    
+                                    "MERGE (invoke:Method {name:{invokename}})"
+                                    "MERGE (invokeinst:MethodInstance {name:{invokename},args:{args}})"
+                                    "MERGE (invoke)<-[:INSTANCE_OF]-(invokeinst)"
                                     "MERGE (invokepackage)-[:CONTAIN]->(invokeclass)-[:CONTAIN]->(invoke)"
-                                    "MERGE (callback)-[:EXPLICIT_INVOKE]->(invoke)"
+                                    "MERGE (callback)-[:INVOKE]->(invoke)"
+                                    "MERGE (callback)-[:EXPLICIT_INVOKE]->(invokeinst)"
                                     ;; to quickly find Apk from Method
                                     "MERGE (apk)<-[:INVOKED_BY]-(invoke)"
                                     ])
@@ -170,12 +170,12 @@
                                     "MERGE (callback:Method:Callback {name:{callbackname}})"
                                     "MERGE (invokepackage:Package {name:{invokepackagename}})"
                                     "MERGE (invokeclass:Class {name:{invokeclassname}})"
-                                    (if args
-                                      "MERGE (invoke:Method {name:{invokename},args:{args}})"
-                                      "MERGE (invoke:Method {name:{invokename}})")
-                                    
+                                    "MERGE (invoke:Method {name:{invokename}})"
+                                    "MERGE (invokeinst:MethodInstance {name:{invokename},args:{args}})"
+                                    "MERGE (invoke)<-[:INSTANCE_OF]-(invokeinst)"
                                     "MERGE (invokepackage)-[:CONTAIN]->(invokeclass)-[:CONTAIN]->(invoke)"
-                                    "MERGE (callback)-[:IMPLICIT_INVOKE]->(invoke)"
+                                    "MERGE (callback)-[:INVOKE]->(invoke)"
+                                    "MERGE (callback)-[:IMPLICIT_INVOKE]->(invokeinst)"
                                     ;; to quickly find Apk from Method
                                     "MERGE (apk)<-[:INVOKED_BY]-(invoke)"
                                     ])

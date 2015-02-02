@@ -38,8 +38,8 @@
 
 ;;; declaration
 
-(declare shallow-pass deep-pass)
 (declare process-worklist)
+(declare soot-queryable?)
 (declare get-application-classes get-application-methods)
 (declare get-method-body map-class-bodies run-body-packs)
 (declare mapcat-invoke-methodrefs resolve-methodrefs mapcat-invoke-methods)
@@ -73,6 +73,19 @@ process takes a worklist as input, and outputs the new worklist"
   (get-soot-class [this])
   (get-soot-class-name [this])
   (get-soot-name [this]))
+
+(defn soot-queryable?
+  "test whether SottQuery can be applied on cand without Exception"
+  [cand]
+  (try
+    (let [class (-> cand
+                    get-soot-class)]
+      (-> cand get-soot-name)
+      (-> cand get-soot-class-name)
+      (.. class getPackageName))
+    true
+    (catch Exception e
+      false)))
 
 (extend-type nil
   SootQuery

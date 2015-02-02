@@ -46,21 +46,38 @@
   (UnaryOperationSexp. operator operands))
 
 (defrecord InvokeSexp [invoke-type method base args]
-  Sexp)
+  Sexp
+  SootQuery
+  (get-soot-class [this]
+    (get-soot-class (:method this)))
+  (get-soot-class-name [this]
+    (get-soot-class-name (:method this)))
+  (get-soot-name [this]
+    (get-soot-name [this])))
 
 (defn make-invoke-sexp
   [invoke-type method base args]
   (InvokeSexp. invoke-type method base args))
 
 (defrecord InstanceSexp [class instance]
-  Sexp)
+  Sexp
+  SootQuery
+  (get-soot-class [this]
+    (get-soot-class (:class this)))
+  (get-soot-class-name [this]
+    (get-soot-class-name (:class this))))
 
 (defn make-instance-sexp
   [class instance]
   (InstanceSexp. class instance))
 
 (defrecord ClassSexp [class]
-  Sexp)
+  Sexp
+  SootQuery
+  (get-soot-class [this]
+    (get-soot-class (:class this)))
+  (get-soot-class-name [this]
+    (get-soot-class-name (:class this))))
 
 (defn make-class-sexp
   [class]

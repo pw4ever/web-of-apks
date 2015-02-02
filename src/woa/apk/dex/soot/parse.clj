@@ -234,6 +234,8 @@
                                                      (.. callback getName)
                                                      type]
                                                     (->> invokes
+                                                         (filter #(let [{:keys [method args]} %]
+                                                                    (soot-queryable? method)))
                                                          (map #(let [{:keys [method args]} %
                                                                      class (-> method
                                                                                get-soot-class)]
@@ -250,32 +252,32 @@
                                                        :descend]]
                                              (doseq [invoke (set/union explicit-invokes implicit-invokes)]
                                                (let [method (:method invoke)]
-                                                 (when-not (android-api? method)
-                                                   (let [method-name (-> method get-soot-name)
-                                                         method-class (-> method get-soot-class)
-                                                         v {:method method-name
-                                                            :class (-> method get-soot-class-name)
-                                                            :package (.. method-class getPackageName)}
-                                                         ;; Android API supers
-                                                         supers (->> method-class
-                                                                     get-transitive-super-class-and-interface
-                                                                     (filter android-api?))]
-                                                     (when-let [super (some #(try
-                                                                               (if (.. ^soot.SootClass %
-                                                                                       (getMethodByNameUnsafe
-                                                                                        method-name))
-                                                                                 %
-                                                                                 false)
-                                                                               ;; Soot implementation: Ambiguious 
-                                                                               (catch RuntimeException e
-                                                                                 %))
-                                                                            supers)]
-                                                       (let [k {:method method-name
-                                                                :class (-> super get-soot-class-name)
-                                                                :package (.. super getPackageName)}]
-                                                         (swap! result update-in (conj path k)
-                                                                #(conj (set %1) %2) v))))))))
-                                           ))
+                                                 (when (soot-queryable? method)
+                                                   (when-not (android-api? method)
+                                                     (let [method-name (-> method get-soot-name)
+                                                           method-class (-> method get-soot-class)
+                                                           v {:method method-name
+                                                              :class (-> method get-soot-class-name)
+                                                              :package (.. method-class getPackageName)}
+                                                           ;; Android API supers
+                                                           supers (->> method-class
+                                                                       get-transitive-super-class-and-interface
+                                                                       (filter android-api?))]
+                                                       (when-let [super (some #(try
+                                                                                 (if (.. ^soot.SootClass %
+                                                                                         (getMethodByNameUnsafe
+                                                                                          method-name))
+                                                                                   %
+                                                                                   false)
+                                                                                 ;; Soot implementation: Ambiguious 
+                                                                                 (catch RuntimeException e
+                                                                                   %))
+                                                                              supers)]
+                                                         (let [k {:method method-name
+                                                                  :class (-> super get-soot-class-name)
+                                                                  :package (.. super getPackageName)}]
+                                                           (swap! result update-in (conj path k)
+                                                                  #(conj (set %1) %2) v)))))))))))
                                        (catch Exception e
                                          (print-stack-trace-if-verbose e verbose)))))))
                             (.. pool shutdown)

@@ -13,7 +13,7 @@ JOBS=${JOBS:-1}
 
 BLOCK_SIZE=$(du -b ${PREFIX}.list | awk "{ print \$1/${JOBS} }")
 
-WOA_OPTS=${WOA_OPTS:-"-j6 --soot-basic-block-simulation-budget 10 --soot-method-simulation-depth-budget 3"}
+WOA_OPTS=${WOA_OPTS:-"-j6 --soot-basic-block-simulation-budget 100 --soot-method-simulation-depth-budget 10"}
 
 # echo ${JVM_OPTS} ${PREFIX} ${JOBS} ${BLOCK_SIZE} ${WOA_OPTS}
 

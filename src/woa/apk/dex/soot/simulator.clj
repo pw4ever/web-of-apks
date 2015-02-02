@@ -102,7 +102,10 @@
 (extend-type soot.jimple.InstanceFieldRef
   SimulatorValueResolver
   (simulator-resolve-value [field simulator]
-    (let [instance (simulator-resolve-value (.. field getBase) simulator)
+    (let [instance (let [value (simulator-resolve-value (.. field getBase)
+                                                        simulator)]
+                     (when (instance? woa.apk.dex.soot.sexp.InstanceSexp value)
+                       (:instance value)))
           field (.. field getFieldRef)
           value (simulator-get-field instance field)]
       (if (= value :nil)
@@ -140,11 +143,6 @@
   SimulatorValueResolver
   (simulator-resolve-value [const simulator]
     (.. const value)))
-
-;; (extend-type woa.apk.dex.soot.sexp.InstanceSexp
-;;   SimulatorValueResolver
-;;   (simulator-resolve-value [this simulator]
-;;     (:instance this)))
 
 ;; simulator assignment protocol
 
@@ -577,7 +575,7 @@
   [& [class]]
   (let [instance (gensym (str "instance"
                               (when-let [class-name (get-soot-class-name class)]
-                                (str "-" class-name))))]
+                                (str "-" class-name "-"))))]
     (make-instance-sexp class instance)))
 
 (defn- simulator-evaluate

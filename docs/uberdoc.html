@@ -3832,6 +3832,8 @@ spec\s+resource\s+
                                                      (.. callback getName)
                                                      type]
                                                     (-&gt;&gt; invokes
+                                                         (filter #(let [{:keys [method args]} %]
+                                                                    (soot-queryable? method)))
                                                          (map #(let [{:keys [method args]} %
                                                                      class (-&gt; method
                                                                                get-soot-class)]
@@ -3848,31 +3850,32 @@ spec\s+resource\s+
                                                        :descend]]
                                              (doseq [invoke (set/union explicit-invokes implicit-invokes)]
                                                (let [method (:method invoke)]
-                                                 (when-not (android-api? method)
-                                                   (let [method-name (-&gt; method get-soot-name)
-                                                         method-class (-&gt; method get-soot-class)
-                                                         v {:method method-name
-                                                            :class (-&gt; method get-soot-class-name)
-                                                            :package (.. method-class getPackageName)}
-                                                         ;; Android API supers
-                                                         supers (-&gt;&gt; method-class
-                                                                     get-transitive-super-class-and-interface
-                                                                     (filter android-api?))]
-                                                     (when-let [super (some #(try
-                                                                               (if (.. ^soot.SootClass %
-                                                                                       (getMethodByNameUnsafe
-                                                                                        method-name))
-                                                                                 %
-                                                                                 false)
-                                                                               ;; Soot implementation: Ambiguious 
-                                                                               (catch RuntimeException e
-                                                                                 %))
-                                                                            supers)]
-                                                       (let [k {:method method-name
-                                                                :class (-&gt; super get-soot-class-name)
-                                                                :package (.. super getPackageName)}]
-                                                         (swap! result update-in (conj path k)
-                                                                #(conj (set %1) %2) v))))))))))
+                                                 (when (soot-queryable? method)
+                                                   (when-not (android-api? method)
+                                                     (let [method-name (-&gt; method get-soot-name)
+                                                           method-class (-&gt; method get-soot-class)
+                                                           v {:method method-name
+                                                              :class (-&gt; method get-soot-class-name)
+                                                              :package (.. method-class getPackageName)}
+                                                           ;; Android API supers
+                                                           supers (-&gt;&gt; method-class
+                                                                       get-transitive-super-class-and-interface
+                                                                       (filter android-api?))]
+                                                       (when-let [super (some #(try
+                                                                                 (if (.. ^soot.SootClass %
+                                                                                         (getMethodByNameUnsafe
+                                                                                          method-name))
+                                                                                   %
+                                                                                   false)
+                                                                                 ;; Soot implementation: Ambiguious 
+                                                                                 (catch RuntimeException e
+                                                                                   %))
+                                                                              supers)]
+                                                         (let [k {:method method-name
+                                                                  :class (-&gt; super get-soot-class-name)
+                                                                  :package (.. super getPackageName)}]
+                                                           (swap! result update-in (conj path k)
+                                                                  #(conj (set %1) %2) v)))))))))))
                                        (catch Exception e
                                          (print-stack-trace-if-verbose e verbose)))))))
                             (.. pool shutdown)
@@ -3929,17 +3932,34 @@ spec\s+resource\s+
   [operator operands]
   (UnaryOperationSexp. operator operands))</pre></td></tr><tr><td class="docs">
 </td><td class="codes"><pre class="brush: clojure">(defrecord InvokeSexp [invoke-type method base args]
-  Sexp)</pre></td></tr><tr><td class="docs">
+  Sexp
+  SootQuery
+  (get-soot-class [this]
+    (get-soot-class (:method this)))
+  (get-soot-class-name [this]
+    (get-soot-class-name (:method this)))
+  (get-soot-name [this]
+    (get-soot-name [this])))</pre></td></tr><tr><td class="docs">
 </td><td class="codes"><pre class="brush: clojure">(defn make-invoke-sexp
   [invoke-type method base args]
   (InvokeSexp. invoke-type method base args))</pre></td></tr><tr><td class="docs">
 </td><td class="codes"><pre class="brush: clojure">(defrecord InstanceSexp [class instance]
-  Sexp)</pre></td></tr><tr><td class="docs">
+  Sexp
+  SootQuery
+  (get-soot-class [this]
+    (get-soot-class (:class this)))
+  (get-soot-class-name [this]
+    (get-soot-class-name (:class this))))</pre></td></tr><tr><td class="docs">
 </td><td class="codes"><pre class="brush: clojure">(defn make-instance-sexp
   [class instance]
   (InstanceSexp. class instance))</pre></td></tr><tr><td class="docs">
 </td><td class="codes"><pre class="brush: clojure">(defrecord ClassSexp [class]
-  Sexp)</pre></td></tr><tr><td class="docs">
+  Sexp
+  SootQuery
+  (get-soot-class [this]
+    (get-soot-class (:class this)))
+  (get-soot-class-name [this]
+    (get-soot-class-name (:class this))))</pre></td></tr><tr><td class="docs">
 </td><td class="codes"><pre class="brush: clojure">(defn make-class-sexp
   [class]
   (ClassSexp. class))</pre></td></tr><tr><td class="docs">
@@ -4077,7 +4097,10 @@ spec\s+resource\s+
 </td><td class="codes"><pre class="brush: clojure">(extend-type soot.jimple.InstanceFieldRef
   SimulatorValueResolver
   (simulator-resolve-value [field simulator]
-    (let [instance (simulator-resolve-value (.. field getBase) simulator)
+    (let [instance (let [value (simulator-resolve-value (.. field getBase)
+                                                        simulator)]
+                     (when (instance? woa.apk.dex.soot.sexp.InstanceSexp value)
+                       (:instance value)))
           field (.. field getFieldRef)
           value (simulator-get-field instance field)]
       (if (= value :nil)
@@ -4109,11 +4132,7 @@ spec\s+resource\s+
 </td><td class="codes"><pre class="brush: clojure">(extend-type soot.jimple.Constant
   SimulatorValueResolver
   (simulator-resolve-value [const simulator]
-    (.. const value)))</pre></td></tr><tr><td class="docs"><p>(extend-type woa.apk.dex.soot.sexp.InstanceSexp
-  SimulatorValueResolver
-  (simulator-resolve-value [this simulator]
-    (:instance this)))</p>
-</td><td class="codes"></td></tr><tr><td class="docs"><p>simulator assignment protocol</p>
+    (.. const value)))</pre></td></tr><tr><td class="docs"><p>simulator assignment protocol</p>
 </td><td class="codes"></td></tr><tr><td class="docs"><p>simulator should be an atom to have persistent effect</p>
 </td><td class="codes"><pre class="brush: clojure">(defprotocol SimulatorAssignment
   (simulator-assign [target value simulator]))</pre></td></tr><tr><td class="docs">
@@ -4503,7 +4522,7 @@ spec\s+resource\s+
   [&amp; [class]]
   (let [instance (gensym (str &quot;instance&quot;
                               (when-let [class-name (get-soot-class-name class)]
-                                (str &quot;-&quot; class-name))))]
+                                (str &quot;-&quot; class-name &quot;-&quot;))))]
     (make-instance-sexp class instance)))</pre></td></tr><tr><td class="docs"><p>evaluate expr in simulator (simulator should be an Clojure atom to allow updates)</p>
 </td><td class="codes"><pre class="brush: clojure">(defn- simulator-evaluate
   [expr
@@ -5359,8 +5378,8 @@ spec\s+resource\s+
    (soot.jimple.toolkits.callgraph CallGraph
                                    Edge)))</pre></td></tr><tr><td class="docs"><p>declaration</p>
 </td><td class="codes"></td></tr><tr><td class="docs">
-</td><td class="codes"><pre class="brush: clojure">(declare shallow-pass deep-pass)
-(declare process-worklist)
+</td><td class="codes"><pre class="brush: clojure">(declare process-worklist)
+(declare soot-queryable?)
 (declare get-application-classes get-application-methods)
 (declare get-method-body map-class-bodies run-body-packs)
 (declare mapcat-invoke-methodrefs resolve-methodrefs mapcat-invoke-methods)
@@ -5383,7 +5402,18 @@ spec\s+resource\s+
 </td><td class="codes"><pre class="brush: clojure">(defprotocol SootQuery
   (get-soot-class [this])
   (get-soot-class-name [this])
-  (get-soot-name [this]))</pre></td></tr><tr><td class="docs">
+  (get-soot-name [this]))</pre></td></tr><tr><td class="docs"><p>test whether SottQuery can be applied on cand without Exception</p>
+</td><td class="codes"><pre class="brush: clojure">(defn soot-queryable?
+  [cand]
+  (try
+    (let [class (-&gt; cand
+                    get-soot-class)]
+      (-&gt; cand get-soot-name)
+      (-&gt; cand get-soot-class-name)
+      (.. class getPackageName))
+    true
+    (catch Exception e
+      false)))</pre></td></tr><tr><td class="docs">
 </td><td class="codes"><pre class="brush: clojure">(extend-type nil
   SootQuery
   (get-soot-class [this]

@@ -105,6 +105,7 @@
    ["-n" "--neo4j-task-populate" "populate Neo4j with APK model"]
    ["-t" "--neo4j-task-tag" "tag Neo4j Apk nodes with labels"]
    ["-T" "--neo4j-task-untag" "untag Neo4j Apk nodes with labels"]
+   [nil "--neo4j-no-methodinstance" "omit MethodInstance"]
    
    ;; misc tasks
    ["-d" "--dump-manifest" "dump AndroidManifest.xml"]

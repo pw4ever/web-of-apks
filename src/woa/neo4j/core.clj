@@ -24,7 +24,7 @@
 
 (defn populate-from-parsed-apk
   "populate the database with the parsed apk structure"
-  [apk {:keys []
+  [apk {:keys [neo4j-no-methodinstance]
         :as options}]
   (let [manifest (:manifest apk)
         dex-sha256 (:dex-sha256 apk)
@@ -40,10 +40,7 @@
       conn
       transaction
       true
-
-      ;; do not stack up the query strings for memory efficiency: execute as soon as possible
-
-      ;; overall structure
+      
       (ntx/execute
        conn transaction
        [(ntx/statement
@@ -80,177 +77,221 @@
           :apkpackage apk-package
           :apkversionname apk-version-name
           :apkversioncode apk-version-code})])
-      
-      (doseq [package-name (->> dex keys)]
-        (doseq [class-name (->> (get-in dex [package-name]) keys)]
-          (ntx/execute
-           conn transaction
-           [(ntx/statement
-             (str/join " "
-                       ["MERGE (dex:Dex {sha256:{dexsha256}})"
-                        "MERGE (package:Package {name:{packagename}})"
-                        "MERGE (class:Class {name:{classname}})"
-                        "MERGE (package)-[:CONTAIN]->(class)"
-                        "MERGE (dex)-[:CONTAIN]->(class)"])
-             {:dexsha256 dex-sha256
-              :packagename package-name
-              :classname class-name})])
-          
-          (let [{:keys [android-api-ancestors callbacks]} (->> (get-in dex [package-name class-name]))]
-            (doseq [base android-api-ancestors]
-              (let [ancestor-package (:package base)
-                    ancestor-class (:class base)]
-                (ntx/execute
-                 conn transaction
-                 [(ntx/statement
-                   (str/join " "
-                             ["MERGE (class:Class {name:{classname}})"
-                              "MERGE (ancestorpackage:Package {name:{ancestorpackage}})"
-                              "MERGE (ancestorclass:Class {name:{ancestorclass}})"
-                              "MERGE (ancestorpackage)-[:CONTAIN]->(ancestorclass)"
-                              "MERGE (class)-[:DESCEND]->(ancestorclass)"])
-                   {:classname class-name
-                    :ancestorpackage ancestor-package
-                    :ancestorclass ancestor-class})])))
-            (doseq [callback-name (->> callbacks keys)]
-              (let [path [package-name class-name :callbacks callback-name]]
-                (ntx/execute
-                 conn transaction
-                 [(ntx/statement
-                   (str/join " "
-                             ["MERGE (class:Class {name:{classname}})"
-                              "MERGE (callback:Method:Callback {name:{callbackname}})"
-                              "MERGE (class)-[:CONTAIN]->(callback)"])
-                   {:classname class-name
-                    :callbackname (str class-name "." callback-name)})])
-                ;; explicit control flow
-                (let [path (conj path :explicit)]
-                  (doseq [callback-invoke (get-in dex path)]
-                    (let [invoke-package-name (:package callback-invoke)
-                          invoke-class-name (:class callback-invoke)
-                          invoke-name (:method callback-invoke)
-                          args (:args callback-invoke)]
-                      (ntx/execute
-                       conn transaction
-                       [(ntx/statement
-                         (str/join " "
-                                   ["MERGE (apk:Apk {sha256:{apksha256}})"
-                                    "MERGE (callback:Method:Callback {name:{callbackname}})"
-                                    "MERGE (invokepackage:Package {name:{invokepackagename}})"
-                                    "MERGE (invokeclass:Class {name:{invokeclassname}})"
-                                    "MERGE (invoke:Method {name:{invokename}})"
-                                    "MERGE (invokeinst:MethodInstance {name:{invokename},args:{args}})"
-                                    "MERGE (invoke)<-[:INSTANCE_OF]-(invokeinst)"
-                                    "MERGE (invokepackage)-[:CONTAIN]->(invokeclass)-[:CONTAIN]->(invoke)"
-                                    "MERGE (callback)-[:INVOKE]->(invoke)"
-                                    "MERGE (callback)-[:EXPLICIT_INVOKE]->(invokeinst)"
-                                    ;; to quickly find Apk from Method
-                                    "MERGE (apk)<-[:INVOKED_BY]-(invoke)"
-                                    ])
-                         (merge {:apksha256 apk-sha256
-                                 :callbackname (str class-name "." callback-name)
-                                 :invokepackagename invoke-package-name
-                                 :invokeclassname invoke-class-name
-                                 :invokename (str invoke-class-name "." invoke-name)}
-                                (if args
-                                  {:args args}
-                                  {})))]))))
-                ;; implicit control flow
-                (let [path (conj path :implicit)]
-                  (doseq [callback-invoke (get-in dex path)]
-                    (let [invoke-package-name (:package callback-invoke)
-                          invoke-class-name (:class callback-invoke)
-                          invoke-name (:method callback-invoke)
-                          args (:args callback-invoke)]
-                      (ntx/execute
-                       conn transaction
-                       [(ntx/statement
-                         (str/join " "
-                                   ["MERGE (apk:Apk {sha256:{apksha256}})"
-                                    "MERGE (callback:Method:Callback {name:{callbackname}})"
-                                    "MERGE (invokepackage:Package {name:{invokepackagename}})"
-                                    "MERGE (invokeclass:Class {name:{invokeclassname}})"
-                                    "MERGE (invoke:Method {name:{invokename}})"
-                                    "MERGE (invokeinst:MethodInstance {name:{invokename},args:{args}})"
-                                    "MERGE (invoke)<-[:INSTANCE_OF]-(invokeinst)"
-                                    "MERGE (invokepackage)-[:CONTAIN]->(invokeclass)-[:CONTAIN]->(invoke)"
-                                    "MERGE (callback)-[:INVOKE]->(invoke)"
-                                    "MERGE (callback)-[:IMPLICIT_INVOKE]->(invokeinst)"
-                                    ;; to quickly find Apk from Method
-                                    "MERGE (apk)<-[:INVOKED_BY]-(invoke)"
-                                    ])
-                         (merge {:apksha256 apk-sha256
-                                 :callbackname (str class-name "." callback-name)
-                                 :invokepackagename invoke-package-name
-                                 :invokeclassname invoke-class-name
-                                 :invokename (str invoke-class-name "." invoke-name)}
-                                (if args
-                                  {:args args}
-                                  {})))]))))
-                ;; invokes that descend from Android API
-                (let [path (conj path :descend)]
-                  (doseq [[api-invoke callback-invokes] (get-in dex path)]
-                    (let [api-package-name (:package api-invoke)
-                          api-class-name (:class api-invoke)
-                          api-name (:method api-invoke)]
-                      (ntx/execute
-                       conn transaction
-                       [(ntx/statement
-                         (str/join " "
-                                   ["MERGE (apipackage:Package {name:{apipackagename}})"
-                                    "MERGE (apiclass:Class {name:{apiclassname}})"
-                                    "MERGE (apiname:Method {name:{apiname}})"
-                                    "MERGE (apipackage)-[:CONTAIN]->(apiclass)-[:CONTAIN]->(apiname)"])
-                         {:apipackagename api-package-name
-                          :apiclassname api-class-name
-                          :apiname (str api-class-name "." api-name)})])
-                      (doseq [callback-invoke callback-invokes]
-                        (let [invoke-package-name (:package callback-invoke)
-                              invoke-class-name (:class callback-invoke)
-                              invoke-name (:method callback-invoke)]
-                          (ntx/execute
-                           conn transaction
-                           [(ntx/statement
+
+      (ntx/execute
+       conn transaction
+       (let [result (atom [])]
+         (doseq [package-name (->> dex keys)]
+           (let [class-names (->> (get-in dex [package-name]) keys)]
+             (swap! result conj
+                    (ntx/statement
+                     (str/join " "
+                               ["MERGE (dex:Dex {sha256:{dexsha256}})"
+                                "MERGE (package:Package {name:{packagename}})"
+                                "FOREACH ("
+                                "classname in {classnames} |"
+                                "  MERGE (class:Class {name:classname})"
+                                "  MERGE (package)-[:CONTAIN]->(class)"
+                                "  MERGE (dex)-[:CONTAIN]->(class)"
+                                ")"])
+                     {:dexsha256 dex-sha256
+                      :packagename package-name
+                      :classnames class-names}))))
+         @result))
+
+      (ntx/execute
+       conn transaction
+       (let [result (atom [])]
+         (doseq [package-name (->> dex keys)]
+           (let [class-names (->> (get-in dex [package-name]) keys)]
+             (doseq [class-name class-names]
+               (let [{:keys [android-api-ancestors callbacks]} (->> (get-in dex [package-name class-name]))]
+                 (doseq [base android-api-ancestors]
+                   (let [ancestor-package (:package base)
+                         ancestor-class (:class base)]
+                     (swap! result conj
+                            (ntx/statement
                              (str/join " "
-                                       ["MERGE (apiname:Method {name:{apiname}})"
-                                        "MERGE (invokename:Method {name:{invokename}})"
-                                        "MERGE (apiname)<-[:DESCEND]-(invokename)"])
-                             (merge {:apiname (str api-class-name "." api-name)
-                                     :invokename (str invoke-class-name "." invoke-name)}))])))))))))))
+                                       ["MERGE (class:Class {name:{classname}})"
+                                        "MERGE (ancestorpackage:Package {name:{ancestorpackage}})"
+                                        "MERGE (ancestorclass:Class {name:{ancestorclass}})"
+                                        "MERGE (ancestorpackage)-[:CONTAIN]->(ancestorclass)"
+                                        "MERGE (class)-[:DESCEND]->(ancestorclass)"])
+                             {:classname class-name
+                              :ancestorpackage ancestor-package
+                              :ancestorclass ancestor-class}))))))))
+         @result))      
+
+      (ntx/execute
+       conn transaction
+       (let [result (atom [])]
+         (doseq [package-name (->> dex keys)]
+           (let [class-names (->> (get-in dex [package-name]) keys)]
+             (doseq [class-name class-names]
+               (let [{:keys [android-api-ancestors callbacks]} (->> (get-in dex [package-name class-name]))]
+                 (doseq [callback-name (->> callbacks keys)]
+                   (let [path [package-name class-name :callbacks callback-name]]
+                     (swap! result conj
+                            (ntx/statement
+                             (str/join " "
+                                       ["MERGE (class:Class {name:{classname}})"
+                                        "MERGE (callback:Method:Callback {name:{callbackname}})"
+                                        "MERGE (class)-[:CONTAIN]->(callback)"])
+                             {:classname class-name
+                              :callbackname (str class-name "." callback-name)}))
+                     ;; explicit control flow
+                     (let [path (conj path :explicit)]
+                       ;; deduplication
+                       (let [callback-invokes (->> (get-in dex path)
+                                                   (map #(select-keys % [:package :class :method]))
+                                                   (into #{}))]
+                         (doseq [callback-invoke callback-invokes]
+                           (let [invoke-package-name (:package callback-invoke)
+                                 invoke-class-name (:class callback-invoke)
+                                 invoke-name (:method callback-invoke)]
+                             (swap! result conj
+                                    (ntx/statement
+                                     (str/join " "
+                                               ["MERGE (apk:Apk {sha256:{apksha256}})"
+                                                "MERGE (callback:Callback {name:{callbackname}})"
+                                                "MERGE (invokepackage:Package {name:{invokepackagename}})"
+                                                "MERGE (invokeclass:Class {name:{invokeclassname}})"
+                                                "MERGE (invoke:Method {name:{invokename}})"
+                                                "MERGE (invokepackage)-[:CONTAIN]->(invokeclass)-[:CONTAIN]->(invoke)"
+                                                "MERGE (callback)-[:INVOKE]->(invoke)"
+                                                ;; to quickly find Apk from Method
+                                                "MERGE (apk)<-[:INVOKED_BY]-(invoke)"])
+                                     {:apksha256 apk-sha256
+                                      :callbackname (str class-name "." callback-name)
+                                      :invokepackagename invoke-package-name
+                                      :invokeclassname invoke-class-name
+                                      :invokename (str invoke-class-name "." invoke-name)})))))
+                       (when-not neo4j-no-methodinstance
+                         (doseq [callback-invoke (get-in dex path)]
+                           (let [invoke-class-name (:class callback-invoke)
+                                 invoke-name (:method callback-invoke)
+                                 args (:args callback-invoke)]
+                             (swap! result conj
+                                    (ntx/statement
+                                     (str/join " "
+                                               ["MERGE (callback:Callback {name:{callbackname}})"
+                                                "MERGE (invoke:Method {name:{invokename}})"
+                                                "MERGE (invokeinst:MethodInstance {name:{invokename},args:{args}})"
+                                                "MERGE (invoke)<-[:INSTANCE_OF]-(invokeinst)"
+                                                "MERGE (callback)-[:EXPLICIT_INVOKE]->(invokeinst)"])
+                                     {:callbackname (str class-name "." callback-name)
+                                      :invokename (str invoke-class-name "." invoke-name)
+                                      :args args}))))))
+                     ;; implicit control flow
+                     (let [path (conj path :implicit)]
+                       ;; deduplication
+                       (let [callback-invokes (->> (get-in dex path)
+                                                   (map #(select-keys % [:package :class :method]))
+                                                   (into #{}))]
+                         (doseq [callback-invoke callback-invokes]
+                           (let [invoke-package-name (:package callback-invoke)
+                                 invoke-class-name (:class callback-invoke)
+                                 invoke-name (:method callback-invoke)]
+                             (swap! result conj
+                                    (ntx/statement
+                                     (str/join " "
+                                               ["MERGE (apk:Apk {sha256:{apksha256}})"
+                                                "MERGE (callback:Callback {name:{callbackname}})"
+                                                "MERGE (invokepackage:Package {name:{invokepackagename}})"
+                                                "MERGE (invokeclass:Class {name:{invokeclassname}})"
+                                                "MERGE (invoke:Method {name:{invokename}})"
+                                                "MERGE (invokepackage)-[:CONTAIN]->(invokeclass)-[:CONTAIN]->(invoke)"
+                                                "MERGE (callback)-[:INVOKE]->(invoke)"
+                                                ;; to quickly find Apk from Method
+                                                "MERGE (apk)<-[:INVOKED_BY]-(invoke)"])
+                                     {:apksha256 apk-sha256
+                                      :callbackname (str class-name "." callback-name)
+                                      :invokepackagename invoke-package-name
+                                      :invokeclassname invoke-class-name
+                                      :invokename (str invoke-class-name "." invoke-name)})))))
+                       (when-not neo4j-no-methodinstance
+                         (doseq [callback-invoke (get-in dex path)]
+                           (let [invoke-class-name (:class callback-invoke)
+                                 invoke-name (:method callback-invoke)
+                                 args (:args callback-invoke)]
+                             (swap! result conj
+                                    (ntx/statement
+                                     (str/join " "
+                                               ["MERGE (callback:Callback {name:{callbackname}})"
+                                                "MERGE (invoke:Method {name:{invokename}})"
+                                                "MERGE (invokeinst:MethodInstance {name:{invokename},args:{args}})"
+                                                "MERGE (invoke)<-[:INSTANCE_OF]-(invokeinst)"
+                                                "MERGE (callback)-[:IMPLICIT_INVOKE]->(invokeinst)"])
+                                     {:callbackname (str class-name "." callback-name)
+                                      :invokename (str invoke-class-name "." invoke-name)
+                                      :args args}))))))
+                     ;; invokes that descend from Android API
+                     (let [path (conj path :descend)]
+                       (doseq [[api-invoke callback-invokes] (get-in dex path)]
+                         (let [api-package-name (:package api-invoke)
+                               api-class-name (:class api-invoke)
+                               api-name (:method api-invoke)]
+                           (swap! result conj
+                                  (ntx/statement
+                                   (str/join " "
+                                             ["MERGE (apipackage:Package {name:{apipackagename}})"
+                                              "MERGE (apiclass:Class {name:{apiclassname}})"
+                                              "MERGE (apiname:Method {name:{apiname}})"
+                                              "MERGE (apipackage)-[:CONTAIN]->(apiclass)-[:CONTAIN]->(apiname)"])
+                                   {:apipackagename api-package-name
+                                    :apiclassname api-class-name
+                                    :apiname (str api-class-name "." api-name)}))
+                           (doseq [callback-invoke callback-invokes]
+                             (let [invoke-package-name (:package callback-invoke)
+                                   invoke-class-name (:class callback-invoke)
+                                   invoke-name (:method callback-invoke)]
+                               (swap! result conj
+                                      (ntx/statement
+                                       (str/join " "
+                                                 ["MERGE (apiname:Method {name:{apiname}})"
+                                                  "MERGE (invokename:Method {name:{invokename}})"
+                                                  "MERGE (apiname)<-[:DESCEND]-(invokename)"])
+                                       (merge {:apiname (str api-class-name "." api-name)
+                                               :invokename (str invoke-class-name "." invoke-name)}))))))))))))))         
+         
+         @result))
       
       ;; app components
-      (doseq [comp-type [:activity :service :receiver]]
-        (doseq [[comp-name {:keys [intent-filter-action
-                                   intent-filter-category]}]
-                (->> manifest
-                     comp-type)]
-          (let [comp-name (name comp-name)
-                intent-filter-action (map name intent-filter-action)
-                intent-filter-category (map name intent-filter-category)]
-            (ntx/execute
-             conn transaction
-             [(ntx/statement
-               (str/join " "
-                         ["MERGE (dex:Dex {sha256:{dexsha256}})"
-                          "MERGE (ic:Class {name:{compname}})"
-                          (format "SET ic:%1$s:Component"
-                                  (->> comp-type name str/capitalize))
-                          "MERGE (dex)-[:CONTAIN]->(ic)"
-                          "FOREACH ("
-                          "action IN {intentfilteraction} |"
-                          "  MERGE (n:IntentFilterAction {name:action})"
-                          "  MERGE (n)-[:TRIGGER]->(ic)"
-                          ")"
-                          "FOREACH ("
-                          "category IN {intentfiltercategory} |"
-                          "  MERGE (n:IntentFilterCategory {name:category})"
-                          "  MERGE (n)-[:TRIGGER]->(ic)"
-                          ")"
-                          ])
-               {:dexsha256 dex-sha256
-                :compname comp-name
-                :intentfilteraction intent-filter-action
-                :intentfiltercategory intent-filter-category})]))))
+      (ntx/execute
+       conn transaction
+       (let [result (atom [])]
+         (doseq [comp-type [:activity :service :receiver]]
+           (doseq [[comp-name {:keys [intent-filter-action
+                                      intent-filter-category]}]
+                   (->> manifest
+                        comp-type)]
+             (let [comp-name (name comp-name)
+                   intent-filter-action (map name intent-filter-action)
+                   intent-filter-category (map name intent-filter-category)]
+               (swap! result conj
+                      (ntx/statement
+                       (str/join " "
+                                 ["MERGE (dex:Dex {sha256:{dexsha256}})"
+                                  "MERGE (ic:Class {name:{compname}})"
+                                  (format "SET ic:%1$s:Component"
+                                          (->> comp-type name str/capitalize))
+                                  "MERGE (dex)-[:CONTAIN]->(ic)"
+                                  "FOREACH ("
+                                  "action IN {intentfilteraction} |"
+                                  "  MERGE (n:IntentFilterAction {name:action})"
+                                  "  MERGE (n)-[:TRIGGER]->(ic)"
+                                  ")"
+                                  "FOREACH ("
+                                  "category IN {intentfiltercategory} |"
+                                  "  MERGE (n:IntentFilterCategory {name:category})"
+                                  "  MERGE (n)-[:TRIGGER]->(ic)"
+                                  ")"
+                                  ])
+                       {:dexsha256 dex-sha256
+                        :compname comp-name
+                        :intentfilteraction intent-filter-action
+                        :intentfiltercategory intent-filter-category})))))         
+         @result))
       
       ;; any more query within the transaction?
       )))

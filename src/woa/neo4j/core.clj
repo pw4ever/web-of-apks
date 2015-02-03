@@ -312,6 +312,7 @@
                               "Package" "name"
                               "Class" "name"
                               "Method" "name"
+                              "MethodInstance" "name"
                               "Callback" "name"
                               "Activity" "name"
                               "Service" "name"

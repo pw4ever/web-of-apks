@@ -31,7 +31,7 @@ before_script:
 - export PATH=$HOME/bin/:$PATH
 
 script:
-- make -j3 release
+- make release
 - woa-with-jmx 2014 -h
 - woa -h
 - find 01sample -type f | woa --prep-tags '[[["Dataset"] {"id" "dst-sample" "name" "my sample database"}]]' | woa-with-jmx 2014 -dsvvv

@@ -24,7 +24,7 @@
 
 (defn populate-from-parsed-apk
   "populate the database with the parsed apk structure"
-  [apk {:keys [neo4j-no-methodinstance]
+  [apk {:keys [neo4j-include-methodinstance]
         :as options}]
   (let [manifest (:manifest apk)
         dex-sha256 (:dex-sha256 apk)
@@ -166,7 +166,7 @@
                                       :invokepackagename invoke-package-name
                                       :invokeclassname invoke-class-name
                                       :invokename (str invoke-class-name "." invoke-name)})))))
-                       (when-not neo4j-no-methodinstance
+                       (when neo4j-include-methodinstance
                          (doseq [callback-invoke (get-in dex path)]
                            (let [invoke-class-name (:class callback-invoke)
                                  invoke-name (:method callback-invoke)
@@ -209,7 +209,7 @@
                                       :invokepackagename invoke-package-name
                                       :invokeclassname invoke-class-name
                                       :invokename (str invoke-class-name "." invoke-name)})))))
-                       (when-not neo4j-no-methodinstance
+                       (when neo4j-include-methodinstance
                          (doseq [callback-invoke (get-in dex path)]
                            (let [invoke-class-name (:class callback-invoke)
                                  invoke-name (:method callback-invoke)

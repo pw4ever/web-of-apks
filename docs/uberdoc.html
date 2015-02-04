@@ -5834,6 +5834,7 @@ spec\s+resource\s+
   (:require [me.raynes.fs :as fs])
   (:require [clojure.tools.nrepl.server :refer [start-server stop-server]])
   (:require [cider.nrepl :refer [cider-nrepl-handler]])
+  (:require [taoensso.nippy :as nippy])
   ;; imports
   (:import (java.util.concurrent Executors
                                  TimeUnit))
@@ -5846,6 +5847,7 @@ spec\s+resource\s+
    [&quot;-v&quot; &quot;--verbose&quot; &quot;be verbose (more \&quot;v\&quot; for more verbosity)&quot;
     :default 0
     :assoc-fn (fn [m k _] (update-in m [k] inc))]
+   [&quot;-L&quot; &quot;--no-line-reading&quot; &quot;do not read from stdin; exit if other tasks complete&quot;]
    [&quot;-i&quot; &quot;--interactive&quot; &quot;do not exit (i.e., shutdown-agents) at the end&quot;]
    [nil &quot;--delay-start SEC&quot; &quot;delay start for a random seconds from 1 to (max) SEC&quot;
     :parse-fn #(Integer/parseInt %)
@@ -5886,8 +5888,12 @@ spec\s+resource\s+
    [nil &quot;--soot-no-implicit-cf&quot; &quot;do not detect implicit control flows (for comparison)&quot;]
    [nil &quot;--soot-dump-all-invokes&quot; &quot;dump all invokes&quot;]
    [nil &quot;--soot-result-exclude-app-methods&quot; &quot;exclude app internal methods from the result&quot;]
-   [nil &quot;--dump-soot-model FILE&quot; &quot;dump Soot model to FILE&quot;]
-   [nil &quot;--load-soot-model FILE&quot; &quot;load Soot model from FILE&quot;]
+   [nil &quot;--dump-model FILE&quot; &quot;dump binary APK model; append dump file paths to FILE&quot;]
+   [nil &quot;--load-model FILE&quot; &quot;load binary APK model; load from dump file paths in FILE&quot;]
+   [nil &quot;--convert-model&quot; &quot;convert model between binary and readable formats&quot;]
+   [nil &quot;--readable-model&quot; &quot;dump/load readable APK model; --dump/load-model FILE will dump/load readable model directly to/from FILE&quot;]
+   [nil &quot;--println-model&quot; &quot;println loaded APK model&quot;]
+   [nil &quot;--pprint-model&quot; &quot;pprint loaded APK model&quot;]
    ;; Neo4j config
    [nil &quot;--neo4j-port PORT&quot; &quot;Neo4j server port&quot;
     :parse-fn #(Integer/parseInt %)
@@ -5923,7 +5929,7 @@ spec\s+resource\s+
     :as task}
    {:keys [verbose
            soot-task-build-model
-           dump-soot-model
+           dump-model readable-model
            neo4j-port neo4j-protocol
            neo4j-task-populate neo4j-task-tag neo4j-task-untag
            dump-manifest]
@@ -5942,10 +5948,20 @@ spec\s+resource\s+
                                                  ;; piggyback layout-callbacks on options
                                                  {:layout-callbacks
                                                   (aapt-parse/get-layout-callbacks file-path)}))]
-            (when dump-soot-model
-              (with-open [model-io (io/writer dump-soot-model :append true)]
-                (binding [*out* model-io]
-                  (prn apk))))
+            (when dump-model
+              (try
+                (with-open [model-io (io/writer dump-model :append true)]
+                  (binding [*out* model-io]
+                    (if readable-model
+                      (prn apk)
+                      (let [dump-fname (str (:sha256 apk) &quot;.model-dump&quot;)]
+                        (with-open [model-io (io/output-stream dump-fname)]
+                          (nippy/freeze-to-out! (java.io.DataOutputStream. model-io)
+                                                apk)
+                          ;; write the dump file name out
+                          (println dump-fname))))))
+                (catch Exception e
+                  (print-stack-trace-if-verbose e verbose))))
             (when neo4j-task-populate
               (neo4j/populate-from-parsed-apk apk
                                               options))))
@@ -5975,12 +5991,13 @@ spec\s+resource\s+
   [&amp; args]
   (let [raw (parse-opts args cli-options)
         {:keys [options summary errors]} raw
-        {:keys [verbose interactive delay-start help
+        {:keys [verbose interactive delay-start help no-line-reading
                 prep-tags
                 prep-virustotal
                 virustotal-rate-limit virustotal-backoff virustotal-submit
                 nrepl-port
-                load-soot-model
+                load-model dump-model convert-model println-model pprint-model
+                readable-model
                 neo4j-task-populate]} options]
     (try
       ;; print out error messages if any
@@ -6084,20 +6101,44 @@ spec\s+resource\s+
             (when (&gt; verbose 1)
               (with-mutex-locked
                 (println &quot;Neo4j:&quot; &quot;index created&quot;))))
-          ;; load Soot model and populate Neo4j graph (need to be single-threaded to avoid Neo4j contention)
-          (when load-soot-model
+          ;; load Soot model and populate Neo4j graph
+          ;; single-threaded to avoid Neo4j contention
+          (when load-model
             (try
               (let [counter (atom 0)]
-                (with-open [model-io (io/reader load-soot-model)]
+                (with-open [model-io (io/reader load-model)]
                   (binding [*in* model-io]
                     (loop [line (read-line)]
                       (when line
                         (let [apk (try
-                                    (read-string line)
+                                    (if readable-model
+                                      (read-string line)
+                                      (with-open [model-io (io/input-stream line)]
+                                        (nippy/thaw-from-in! (java.io.DataInputStream. model-io))))
                                     (catch Exception e
                                       (print-stack-trace-if-verbose e verbose)
                                       nil))]
                           (when apk
+                            (when (and convert-model dump-model)
+                              (try
+                                (with-open [model-io (io/writer dump-model :append true)]
+                                  (binding [*out* model-io]
+                                    (if readable-model ; if --load-model is in readable format
+                                      ;; convert to binary model
+                                      (let [dump-fname (str (:sha256 apk) &quot;.model-dump&quot;)]
+                                        (with-open [model-io (io/output-stream dump-fname)]
+                                          (nippy/freeze-to-out! (java.io.DataOutputStream. model-io)
+                                                                apk)
+                                          ;; write the dump file name out
+                                          (println dump-fname)))
+                                      ;; convert to readable model
+                                      (prn apk))))
+                                (catch Exception e
+                                  (print-stack-trace-if-verbose e verbose))))
+                            ((cond pprint-model pprint
+                                   println-model println
+                                   ;; nop
+                                   :otherwise (constantly nil)) apk)
                             (swap! counter inc)
                             (when (and verbose
                                        (&gt; verbose 0))
@@ -6115,21 +6156,22 @@ spec\s+resource\s+
               (catch Exception e
                 (print-stack-trace-if-verbose e verbose))))
           ;; do the work for each line
-          (loop [line (read-line)]
-            (when line
-              ;; ex.: {:file-path &quot;a/b.apk&quot; :tags [{[&quot;Dataset&quot;] {&quot;id&quot; &quot;dst-my&quot; &quot;name&quot; &quot;my dataset&quot;}}]}
-              ;; tags must have &quot;id&quot; node property
-              (let [{:keys [file-path tags] :as task} (try
-                                                        (read-string line)
-                                                        (catch Exception e
-                                                          (print-stack-trace-if-verbose e verbose)
-                                                          nil))]
-                (try
-                  (when (and file-path (fs/readable? file-path))
-                    (work task options))
-                  (catch Exception e
-                    (print-stack-trace-if-verbose e verbose)))
-                (recur (read-line)))))
+          (when-not no-line-reading
+            (loop [line (read-line)]
+              (when line
+                ;; ex.: {:file-path &quot;a/b.apk&quot; :tags [{[&quot;Dataset&quot;] {&quot;id&quot; &quot;dst-my&quot; &quot;name&quot; &quot;my dataset&quot;}}]}
+                ;; tags must have &quot;id&quot; node property
+                (let [{:keys [file-path tags] :as task} (try
+                                                          (read-string line)
+                                                          (catch Exception e
+                                                            (print-stack-trace-if-verbose e verbose)
+                                                            nil))]
+                  (try
+                    (when (and file-path (fs/readable? file-path))
+                      (work task options))
+                    (catch Exception e
+                      (print-stack-trace-if-verbose e verbose)))
+                  (recur (read-line))))))
           (when neo4j-task-populate
             (when (&gt; verbose 1)
               (with-mutex-locked

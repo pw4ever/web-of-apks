@@ -54,7 +54,7 @@
                        0x10000)]]
    
    ;; prepations
-   [nil "--prep-tags TAGS" "TAGS is a Clojure vector of pairs of label types to properties, e.g., [{[\"Dataset\"] {\"id\" \"dataset-my\" \"name\" \"my dataset\"}}]"]
+   [nil "--prep-tags TAGS" "TAGS is a Clojure vector of pairs of label types to properties, e.g., [[[\"Dataset\"] {\"id\" \"dataset-my\" \"name\" \"my dataset\"}]]"]
    [nil "--prep-virustotal" "obtain VirusTotal tags"]
    [nil "--virustotal-apikey APIKEY" "VirusTotal API key"]
    [nil "--virustotal-rate-limit LIMIT-PER-MIN" "number of maximal API calls per minute"

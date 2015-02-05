@@ -5888,9 +5888,9 @@ spec\s+resource\s+
    [nil &quot;--soot-no-implicit-cf&quot; &quot;do not detect implicit control flows (for comparison)&quot;]
    [nil &quot;--soot-dump-all-invokes&quot; &quot;dump all invokes&quot;]
    [nil &quot;--soot-result-exclude-app-methods&quot; &quot;exclude app internal methods from the result&quot;]
-   [nil &quot;--dump-model FILE&quot; &quot;dump binary APK model; append dump file paths to FILE&quot;]
-   [nil &quot;--load-model FILE&quot; &quot;load binary APK model; load from dump file paths in FILE&quot;]
-   [nil &quot;--convert-model&quot; &quot;convert model between binary and readable formats&quot;]
+   [&quot;-d&quot; &quot;--dump-model FILE&quot; &quot;dump binary APK model; append dump file paths to FILE&quot;]
+   [&quot;-l&quot; &quot;--load-model FILE&quot; &quot;load binary APK model; load from dump file paths in FILE&quot;]
+   [&quot;-c&quot; &quot;--convert-model&quot; &quot;convert model between binary and readable formats&quot;]
    [nil &quot;--readable-model&quot; &quot;dump/load readable APK model; --dump/load-model FILE will dump/load readable model directly to/from FILE&quot;]
    [nil &quot;--println-model&quot; &quot;println loaded APK model&quot;]
    [nil &quot;--pprint-model&quot; &quot;pprint loaded APK model&quot;]
@@ -5912,7 +5912,7 @@ spec\s+resource\s+
    [&quot;-T&quot; &quot;--neo4j-task-untag&quot; &quot;untag Neo4j Apk nodes with labels&quot;]
    [nil &quot;--neo4j-include-methodinstance&quot; &quot;include MethodInstance in the WoA model&quot;]
    ;; misc tasks
-   [&quot;-d&quot; &quot;--dump-manifest&quot; &quot;dump AndroidManifest.xml&quot;]
+   [nil &quot;--dump-manifest&quot; &quot;dump AndroidManifest.xml&quot;]
    ])</pre></td></tr><tr><td class="docs"><p>for consumption by nREPL session</p>
 </td><td class="codes"><pre class="brush: clojure">(def main-options
   (atom nil))</pre></td></tr><tr><td class="docs"><p>establish critical section</p>

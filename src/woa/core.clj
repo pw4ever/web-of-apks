@@ -88,9 +88,9 @@
    [nil "--soot-dump-all-invokes" "dump all invokes"]
    [nil "--soot-result-exclude-app-methods" "exclude app internal methods from the result"]
    
-   [nil "--dump-model FILE" "dump binary APK model; append dump file paths to FILE"]
-   [nil "--load-model FILE" "load binary APK model; load from dump file paths in FILE"]
-   [nil "--convert-model" "convert model between binary and readable formats"]
+   ["-d" "--dump-model FILE" "dump binary APK model; append dump file paths to FILE"]
+   ["-l" "--load-model FILE" "load binary APK model; load from dump file paths in FILE"]
+   ["-c" "--convert-model" "convert model between binary and readable formats"]
    [nil "--readable-model" "dump/load readable APK model; --dump/load-model FILE will dump/load readable model directly to/from FILE"]
    [nil "--println-model" "println loaded APK model"]
    [nil "--pprint-model" "pprint loaded APK model"]
@@ -115,7 +115,7 @@
    [nil "--neo4j-include-methodinstance" "include MethodInstance in the WoA model"]
    
    ;; misc tasks
-   ["-d" "--dump-manifest" "dump AndroidManifest.xml"]
+   [nil "--dump-manifest" "dump AndroidManifest.xml"]
 
    ])
 

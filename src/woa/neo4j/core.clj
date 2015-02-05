@@ -158,7 +158,7 @@
                                                 "MERGE (invokeclass:Class {name:{invokeclassname}})"
                                                 "MERGE (invoke:Method {name:{invokename}})"
                                                 "MERGE (invokepackage)-[:CONTAIN]->(invokeclass)-[:CONTAIN]->(invoke)"
-                                                "MERGE (callback)-[:INVOKE]->(invoke)"
+                                                "MERGE (callback)-[:EXPLICIT_INVOKE]->(invoke)"
                                                 ;; to quickly find Apk from Method
                                                 "MERGE (apk)<-[:INVOKED_BY]-(invoke)"])
                                      {:apksha256 apk-sha256
@@ -201,7 +201,7 @@
                                                 "MERGE (invokeclass:Class {name:{invokeclassname}})"
                                                 "MERGE (invoke:Method {name:{invokename}})"
                                                 "MERGE (invokepackage)-[:CONTAIN]->(invokeclass)-[:CONTAIN]->(invoke)"
-                                                "MERGE (callback)-[:INVOKE]->(invoke)"
+                                                "MERGE (callback)-[:IMPLICIT_INVOKE]->(invoke)"
                                                 ;; to quickly find Apk from Method
                                                 "MERGE (apk)<-[:INVOKED_BY]-(invoke)"])
                                      {:apksha256 apk-sha256

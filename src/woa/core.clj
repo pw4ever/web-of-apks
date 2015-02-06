@@ -113,6 +113,7 @@
    ["-t" "--neo4j-task-tag" "tag Neo4j Apk nodes with labels"]
    ["-T" "--neo4j-task-untag" "untag Neo4j Apk nodes with labels"]
    [nil "--neo4j-include-methodinstance" "include MethodInstance in the WoA model"]
+   ["-D" "--neo4j-dump-model-batch-csv PREFIX" "dump Neo4j batch import CSV files to PREFIX; ref: https://github.com/jexp/batch-import/tree/2.1"]
    
    ;; misc tasks
    [nil "--dump-manifest" "dump AndroidManifest.xml"]
@@ -221,7 +222,8 @@
                 nrepl-port
                 load-model dump-model convert-model println-model pprint-model
                 readable-model
-                neo4j-task-populate]} options]
+                neo4j-task-populate
+                neo4j-dump-model-batch-csv]} options]
     (try
       ;; print out error messages if any
       (when errors
@@ -353,11 +355,12 @@
                                     (catch Exception e
                                       (print-stack-trace-if-verbose e verbose)
                                       nil))]
-                          
-                          
                           (when apk
+
+                            (when neo4j-dump-model-batch-csv
+                              (neo4j/add-to-batch-csv apk options))
                             
-                            (when (and convert-model dump-model)
+                            (when (and apk convert-model dump-model)
                               (try
                                 (with-open [model-io (io/writer dump-model :append true)]
                                   (binding [*out* model-io]
@@ -393,6 +396,8 @@
                                 (catch Exception e
                                   (print-stack-trace-if-verbose e verbose)))))
                           (recur (read-line))))))))
+              (when neo4j-dump-model-batch-csv
+                (neo4j/dump-batch-csv neo4j-dump-model-batch-csv options))
               (catch Exception e
                 (print-stack-trace-if-verbose e verbose))))
 

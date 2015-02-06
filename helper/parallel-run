@@ -17,4 +17,4 @@ WOA_OPTS=${WOA_OPTS:-"-j6 --soot-basic-block-simulation-budget 100 --soot-method
 
 # echo ${JVM_OPTS} ${PREFIX} ${JOBS} ${BLOCK_SIZE} ${WOA_OPTS}
 
-cat ${PREFIX}.list | parallel --env JVM_OPTS --block ${BLOCK_SIZE} --pipe -j ${JOBS} -u "woa -s --dump-soot-model ${PREFIX}{%}.dump ${WOA_OPTS}"
+cat ${PREFIX}.list | parallel --env JVM_OPTS --block ${BLOCK_SIZE} --pipe -j ${JOBS} -u "woa -sv --dump-model ${PREFIX}{%}.dump ${WOA_OPTS}"

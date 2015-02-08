@@ -4820,11 +4820,12 @@ spec\s+resource\s+
                                   (find-method-candidates (get-soot-class target-obj)
                                                           &quot;run&quot;
                                                           [])]
-                            (println (format &quot;implicit cf to: %1$s.%2$s:&quot;
-                                             root-class-name method-name)
-                                     method-class
-                                     base-value
-                                     implicit-target)                          
+                            (when soot-debug-show-implicit-cf
+                              (println (format &quot;implicit cf to: %1$s.%2$s:&quot;
+                                               root-class-name method-name)
+                                       method-class
+                                       base-value
+                                       implicit-target))                          
                             (invoke-method implicit-target target-obj [] true)))
                         (#{[&quot;java.util.concurrent.ExecutorService&quot; &quot;submit&quot;]}
                          x)
@@ -4833,21 +4834,23 @@ spec\s+resource\s+
                                   (find-method-candidates (get-soot-class target-obj)
                                                           &quot;run&quot;
                                                           [])]
-                            (println (format &quot;implicit cf to: %1$s.%2$s:&quot;
-                                             root-class-name method-name)
-                                     method-class
-                                     base-value
-                                     implicit-target)                            
+                            (when soot-debug-show-implicit-cf
+                              (println (format &quot;implicit cf to: %1$s.%2$s:&quot;
+                                               root-class-name method-name)
+                                       method-class
+                                       base-value
+                                       implicit-target))                            
                             (invoke-method implicit-target target-obj [] true))
                           (doseq [implicit-target
                                   (find-method-candidates (get-soot-class target-obj)
                                                           &quot;call&quot;
                                                           [])]
-                            (println (format &quot;implicit cf to: %1$s.%2$s:&quot;
-                                             root-class-name method-name)
-                                     method-class
-                                     base-value
-                                     implicit-target)                            
+                            (when soot-debug-show-implicit-cf
+                              (println (format &quot;implicit cf to: %1$s.%2$s:&quot;
+                                               root-class-name method-name)
+                                       method-class
+                                       base-value
+                                       implicit-target))                            
                             (invoke-method implicit-target target-obj [] true)))
                         (#{[&quot;android.os.Handler&quot; &quot;post&quot;]
                            [&quot;android.os.Handler&quot; &quot;postAtFrontOfQueue&quot;]
@@ -4859,11 +4862,12 @@ spec\s+resource\s+
                                   (find-method-candidates (get-soot-class target-obj)
                                                           &quot;run&quot;
                                                           [])]
-                            (println (format &quot;implicit cf to: %1$s.%2$s:&quot;
-                                             root-class-name method-name)
-                                     method-class
-                                     base-value
-                                     implicit-target)
+                            (when soot-debug-show-implicit-cf
+                              (println (format &quot;implicit cf to: %1$s.%2$s:&quot;
+                                               root-class-name method-name)
+                                       method-class
+                                       base-value
+                                       implicit-target))
                             (invoke-method implicit-target target-obj [] true)))
                         (#{[&quot;java.lang.Class&quot; &quot;forName&quot;]}
                          x)

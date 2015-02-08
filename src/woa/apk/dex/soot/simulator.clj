@@ -392,11 +392,11 @@
             :start-stmt (first (:stmts stmt-info))}}
          ;; the process
          (fn [worklist]
-           (when (and @bb-budget
-                      (> @bb-budget 0))
-             ;; width-first search to prevent malicious code exhausting bb-budget
-             (->> worklist
-                  (mapcat (fn [{:keys [simulator start-stmt]}]
+           ;; width-first search to prevent malicious code exhausting bb-budget
+           (->> worklist
+                (mapcat (fn [{:keys [simulator start-stmt]}]
+                          (when (and @bb-budget
+                                     (> @bb-budget 0))
                             (let [{:keys [simulator next-start-stmts]}
                                   (simulate-basic-block {:simulator simulator
                                                          :stmt-info stmt-info
@@ -405,7 +405,6 @@
                                                          :interesting-method?
                                                          interesting-method?}
                                                         options)]
-
                               (swap! bb-budget dec)
                               (swap! all-returns into
                                      (-> simulator
@@ -420,16 +419,14 @@
                                      (-> simulator
                                          simulator-get-component-invokes))
                               ;; add the following to worklist
-                              (when (and @bb-budget
-                                         (> @bb-budget 0))
-                                (for [start-stmt (set next-start-stmts)]
-                                  ;; control flow sensitive!
-                                  {:simulator (-> simulator
-                                                  simulator-clear-returns
-                                                  simulator-clear-explicit-invokes
-                                                  simulator-clear-implicit-invokes
-                                                  simulator-clear-component-invokes)
-                                   :start-stmt start-stmt})))))))))
+                              (for [start-stmt (set next-start-stmts)]
+                                ;; control flow sensitive!
+                                {:simulator (-> simulator
+                                                simulator-clear-returns
+                                                simulator-clear-explicit-invokes
+                                                simulator-clear-implicit-invokes
+                                                simulator-clear-component-invokes)
+                                 :start-stmt start-stmt}))))))))
         {:returns @all-returns
          :explicit-invokes @all-explicit-invokes
          :implicit-invokes @all-implicit-invokes

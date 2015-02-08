@@ -20,30 +20,23 @@
 
          Pack
          Unit
-         SootField
          SootClass
          SootMethod
-         SootMethodRef
-
-         Local
-
-         RefLikeType
-         ArrayType
-         RefType)
+         SootMethodRef)
    (soot.options Options)
-   (soot.jimple Stmt
-                StmtSwitch)
-   (soot.jimple.toolkits.callgraph CallGraph
-                                   Edge)))
+   (soot.jimple Stmt)))
 
 ;;; declaration
 
 (declare process-worklist)
 (declare soot-queryable?)
+(declare find-method-candidates)
 (declare get-application-classes get-application-methods)
 (declare get-method-body map-class-bodies run-body-packs)
 (declare mapcat-invoke-methodrefs resolve-methodrefs mapcat-invoke-methods)
-(declare get-transitive-super-class-and-interface transitive-ancestor?)
+(declare get-transitive-super-class-and-interface
+         get-interesting-transitive-super-class-and-interface
+         transitive-ancestor?)
 (declare filter-interesting-methods)
 (declare get-cg mapcat-edgeout-methods)
 (declare android-api?)
@@ -72,18 +65,18 @@ process takes a worklist as input, and outputs the new worklist"
 (defprotocol SootQuery
   (get-soot-class [this])
   (get-soot-class-name [this])
-  (get-soot-name [this]))
+  (get-soot-name [this])
+  (soot-resolve [this]))
 
 (defn soot-queryable?
   "test whether SottQuery can be applied on cand without Exception"
   [cand]
   (try
-    (let [class (-> cand
-                    get-soot-class)]
+    (let [class (-> cand get-soot-class)]
       (-> cand get-soot-name)
       (-> cand get-soot-class-name)
-      (.. class getPackageName))
-    true
+      (.. class getPackageName)
+      true)
     (catch Exception e
       false)))
 
@@ -94,6 +87,8 @@ process takes a worklist as input, and outputs the new worklist"
   (get-soot-class-name [this]
     nil)
   (get-soot-name [this]
+    nil)
+  (soot-resolve [this]
     nil))
 
 (extend-type soot.SootClass
@@ -101,45 +96,55 @@ process takes a worklist as input, and outputs the new worklist"
   (get-soot-class [this]
     this)
   (get-soot-class-name [this]
-    (.. this getName))
+    (get-soot-name this))
   (get-soot-name [this]
-    (.. this getName)))
+    (.. this getName))
+  (soot-resolve [this]
+    this))
 
 (extend-type soot.SootMethod
   SootQuery
   (get-soot-class [this]
     (.. this getDeclaringClass))
   (get-soot-class-name [this]
-    (.. this getDeclaringClass getName))
+    (->> this get-soot-class get-soot-name))
   (get-soot-name [this]
-    (.. this getName)))
+    (.. this getName))
+  (soot-resolve [this]
+    this))
 
 (extend-type soot.SootMethodRef
   SootQuery
   (get-soot-class [this]
     (.. this declaringClass))
   (get-soot-class-name [this]
-    (.. this declaringClass getName))
+    (->> this get-soot-class get-soot-name))
   (get-soot-name [this]
-    (.. this name)))
+    (.. this name))
+  (soot-resolve [this]
+    (.. this resolve)))
 
 (extend-type soot.SootField
   SootQuery
   (get-soot-class [this]
     (.. this getDeclaringClass))
   (get-soot-class-name [this]
-    (.. this getDeclaringClass getName))
+    (->> this get-soot-class get-soot-name))
   (get-soot-name [this]
-    (.. this getName)))
+    (.. this getName))
+  (soot-resolve [this]
+    this))
 
 (extend-type soot.SootFieldRef
   SootQuery
   (get-soot-class [this]
     (.. this declaringClass))
   (get-soot-class-name [this]
-    (.. this declaringClass getName))
+    (->> this get-soot-class get-soot-name))
   (get-soot-name [this]
-    (.. this name)))
+    (.. this name))
+  (soot-resolve [this]
+    (.. this resolve)))
 
 (extend-type String
   SootQuery
@@ -148,7 +153,21 @@ process takes a worklist as input, and outputs the new worklist"
   (get-soot-class-name [this]
     this)
   (get-soot-name [this]
-    this))
+    this)
+  (soot-resolve [this]
+    ;; only Class string can be reasonably resolved
+    (get-soot-class this)))
+
+(extend-type soot.jimple.ClassConstant
+  SootQuery
+  (get-soot-class [this]
+    (->> (.. this getValue) get-soot-class))
+  (get-soot-class-name [this]
+    (.. this getValue))
+  (get-soot-name [this]
+    (->> this get-soot-class-name))
+  (soot-resolve [this]
+    (->> this get-soot-class)))
 
 (extend-type soot.RefType
   SootQuery
@@ -157,16 +176,141 @@ process takes a worklist as input, and outputs the new worklist"
   (get-soot-class-name [this]
     (.. this getClassName))
   (get-soot-name [this]
-    (.. this getClassName)))
+    (->> this get-soot-class-name))
+  (soot-resolve [this]
+    (->> this get-soot-class)))
 
 (extend-type soot.ArrayType
   SootQuery
   (get-soot-class [this]
-    (get-soot-class (.. this getArrayElementType)))
+    (->> (.. this getArrayElementType) get-soot-class))
   (get-soot-class-name [this]
-    (get-soot-class-name (.. this getArrayElementType)))
+    (->> this get-soot-class get-soot-name))
   (get-soot-name [this]
-    (get-soot-name (.. this getArrayElementType))))
+    (->> this get-soot-class-name))
+  (soot-resolve [this]
+    (->> this get-soot-class)))
+
+(extend-type soot.jimple.FieldRef
+  SootQuery
+  (get-soot-class [this]
+    (->> (.. this getFieldRef) get-soot-class))
+  (get-soot-class-name [this]
+    (->> this get-soot-class get-soot-name))
+  (get-soot-name [this]
+    (->> (.. this getFieldRef) get-soot-name))
+  (soot-resolve [this]
+    (.. this getField)))
+
+
+;;
+;; general helpers
+;;
+
+(defn prettify-args
+  "prettify results"
+  [args]
+  (try
+    (cond
+      (instance? woa.apk.dex.soot.sexp.ErrorSexp args)
+      (list (prettify-args (:type args)) (prettify-args (:info args)))
+      
+      (instance? woa.apk.dex.soot.sexp.ExternalSexp args)
+      (list :instance (prettify-args (:type args)))
+
+      (or (instance? woa.apk.dex.soot.sexp.BinaryOperationSexp args)
+          (instance? woa.apk.dex.soot.sexp.UnaryOperationSexp args))
+      (list* (:operator args)
+             (map prettify-args (:operands args)))
+
+      (instance? woa.apk.dex.soot.sexp.InvokeSexp args)
+      (list :invoke
+            (prettify-args (:method args))
+            (prettify-args (:base args))
+            (prettify-args (:args args)))
+      
+      (instance? woa.apk.dex.soot.sexp.InstanceSexp args)
+      (list :instance (prettify-args (:instance args)))
+      
+      (instance? woa.apk.dex.soot.sexp.MethodSexp args)
+      (list :method (prettify-args (:method args)))
+
+      (instance? woa.apk.dex.soot.sexp.FieldSexp args)
+      (list :field (prettify-args (:field args)))
+
+      (instance? woa.apk.dex.soot.sexp.InstanceOfSexp args)
+      (list :instance-of
+            (prettify-args (:class args))
+            (prettify-args (:instance args)))
+
+      (instance? woa.apk.dex.soot.sexp.NewArraySexp args)
+      (list :new-array
+            (prettify-args (:base-type args))
+            (prettify-args (:size args)))
+
+      (instance? woa.apk.dex.soot.sexp.NewMultiArraySexp args)
+      (list :new-multi-array
+            (prettify-args (:base-type args))
+            (prettify-args (:sizes args)))
+
+      (instance? woa.apk.dex.soot.sexp.ArrayRefSexp args)
+      (list :array-ref
+            (prettify-args (:base args))
+            (prettify-args (:index args)))
+
+      (instance? woa.apk.dex.soot.sexp.ConstantSexp args)
+      (list :constant
+            (prettify-args (:const args)))
+
+      (or (instance? soot.SootClass args))
+      (list :class (get-soot-name args))
+
+      (or (instance? soot.SootMethod args)
+          (instance? soot.SootMethodRef args))
+      (list :method (str (get-soot-class-name args)
+                         "."
+                         (get-soot-name args)))
+
+      (or (instance? soot.SootField args)
+          (instance? soot.SootMethodRef args))
+      (list :field (str (get-soot-class-name args)
+                        "."
+                        (get-soot-name args)))
+      
+      (soot-queryable? args)
+      (->> args get-soot-name)
+
+      (and (not (instance? woa.apk.dex.soot.sexp.Sexp args))
+           (coll? args))
+      (->> args
+           (map prettify-args)
+           (into (empty args)))    
+      
+      :otherwise
+      args)
+    (catch Exception e
+      args)))
+
+
+;;
+;; Soot Method helper
+;; 
+
+(defn find-method-candidates
+  "args=nil: all method of the-class with method-name; otherwise: match by argument numbers"
+  [the-class method-name args]
+  (when-let [methods (not-empty
+                      (->> (.. the-class getMethods)
+                           (filter #(= (->> % get-soot-name)
+                                       method-name))))]
+    (cond
+      (nil? args)
+      methods
+      
+      :otherwise
+      (->> methods
+           (filter #(= (if (number? args) args (count args))
+                       (.. ^SootMethod % getParameterCount)))))))
 
 ;;
 ;; Soot Class helpers
@@ -184,8 +328,9 @@ process takes a worklist as input, and outputs the new worklist"
   [scene]
   (->> scene
        get-application-classes
-       (remove #(.. ^SootClass % isPhantom))
-       (mapcat #(.. ^SootClass % getMethods))
+       (mapcat #(try
+                  (.. ^SootClass % getMethods)
+                  (catch Exception e nil)))
        set))
 
 ;;
@@ -297,8 +442,8 @@ process takes a worklist as input, and outputs the new worklist"
   [methods cg]
   (when cg
     (->> methods
-         (mapcat #(iterator-seq (.. ^CallGraph cg (edgesOutOf %))))
-         (map #(.. ^Edge % getTgt))
+         (mapcat #(iterator-seq (.. ^soot.jimple.toolkits.callgraph.CallGraph cg (edgesOutOf %))))
+         (map #(.. ^soot.jimple.toolkits.callgraph.Edge % getTgt))
          set)))
 
 ;;
@@ -338,6 +483,11 @@ process takes a worklist as input, and outputs the new worklist"
 ;; this memoized function is initilized in with-soot
 (def get-transitive-super-class-and-interface
   "get transitive super class and interfaces known to Soot"
+  nil)
+
+;; this memoized function is initilized in with-soot
+(def get-interesting-transitive-super-class-and-interface
+  "get interesting transitive super class and interfaces known to Soot"
   nil)
 
 ;; this memoized function is initilized in with-soot
@@ -381,6 +531,33 @@ process takes a worklist as input, and outputs the new worklist"
                              (set/union visited# worklist#)))))
                 @known#)))
            
+           get-interesting-transitive-super-class-and-interface#
+           (memoize
+            (fn [class-or-interface# interesting?#]
+              ;; preserve order
+              (let [known# (atom [])
+                    class-or-interface# (get-soot-class class-or-interface#)]
+                (loop [worklist# #{class-or-interface#}
+                       visited# #{}]
+                  (when-not (empty? worklist#)
+                    (let [new-worklist# (atom #{})]
+                      (doseq [item# worklist#
+                              :when (not (visited# item#))]
+                        (if (interesting?# item#)
+                          ;; found the most close interesting ancestor: do not follow its ancestors
+                          (swap! known# conj item#)
+                          ;; otherwise, follow its ancestors
+                          (do
+                            ;; interfaces
+                            (swap! new-worklist# into (->> (.. item# getInterfaces snapshotIterator)
+                                                           iterator-seq))
+                            ;; superclass?
+                            (when (.. item# hasSuperclass)
+                              (swap! new-worklist# conj (.. item# getSuperclass))))))
+                      (recur (set/difference @new-worklist# worklist#)
+                             (set/union visited# worklist#)))))
+                @known#)))           
+           
            transitive-ancestor?#
            (memoize
             (fn [name-or-class-a# class-b#]
@@ -396,6 +573,8 @@ process takes a worklist as input, and outputs the new worklist"
                         ;; set up memoize functions so that they won't retain objects across
                         (alter-var-root #'get-transitive-super-class-and-interface
                                         (fn [_#] get-transitive-super-class-and-interface#))
+                        (alter-var-root #'get-interesting-transitive-super-class-and-interface
+                                        (fn [_#] get-interesting-transitive-super-class-and-interface#))
                         (alter-var-root #'transitive-ancestor?
                                         (fn [_#] transitive-ancestor?#)))
            

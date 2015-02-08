@@ -18,13 +18,6 @@
                  SootClass
                  SootMethod
                  SootMethodRef
-
-                 Local
-
-                 RefLikeType
-                 ArrayType
-                 RefType
-
                  Scene)
            
            (soot.jimple Stmt
@@ -34,6 +27,7 @@
 ;;; declaration
 
 ;; public
+
 (declare with-simulator)
 (declare initialize-classes get-all-interesting-invokes)
 (declare ^:dynamic *init-instances* ^:dynamic *simulator-global-state*)
@@ -42,7 +36,8 @@
 
 (declare simulate-method simulate-basic-block)
 (declare create-simulator 
-         simulator-evaluate simulator-new-instance
+         simulator-evaluate
+         simulator-new-instance
          simulator-get-field simulator-set-field
          simulator-get-this simulator-get-param
          simulator-set-local simulator-get-local
@@ -102,31 +97,21 @@
 (extend-type soot.jimple.InstanceFieldRef
   SimulatorValueResolver
   (simulator-resolve-value [field simulator]
-    (let [instance (let [value (simulator-resolve-value (.. field getBase)
-                                                        simulator)]
-                     (when (instance? woa.apk.dex.soot.sexp.InstanceSexp value)
-                       (:instance value)))
+    (let [instance (simulator-resolve-value (.. field getBase)
+                                            simulator)
           field (.. field getFieldRef)
           value (simulator-get-field instance field)]
       (if (= value :nil)
         (make-field-sexp instance field)
         (simulator-resolve-value value simulator)))))
 
-(extend-type soot.jimple.FieldRef
+(extend-type soot.jimple.StaticFieldRef
   SimulatorValueResolver
   (simulator-resolve-value [field simulator]
-    (let [instance (simulator-get-this simulator)
-          field (.. field getFieldRef)
-          value (simulator-get-field instance field)]
+    (let [value (simulator-get-field nil field)]
       (if (= value :nil)
-        (make-field-sexp instance field)
+        (make-field-sexp nil field)
         (simulator-resolve-value value simulator)))))
-
-(extend-type soot.jimple.MethodHandle
-  SimulatorValueResolver
-  (simulator-resolve-value [method-handle simulator]
-    (let [value (make-method-sexp (.. method-handle methodRef))]
-      (simulator-resolve-value value simulator))))
 
 (extend-type soot.jimple.NullConstant
   SimulatorValueResolver
@@ -136,13 +121,17 @@
 (extend-type soot.jimple.ClassConstant
   SimulatorValueResolver
   (simulator-resolve-value [const simulator]
-    (let [value (make-class-sexp (.. const getType getSootClass))]
-      (simulator-resolve-value value simulator))))
+    (let [value (make-class-sexp (get-soot-class const))]
+      value)))
 
 (extend-type soot.jimple.Constant
   SimulatorValueResolver
   (simulator-resolve-value [const simulator]
-    (.. const value)))
+    (let [value (try
+                  (.. const value)
+                  (catch Exception e
+                    (make-constant-sexp const)))]
+      value)))
 
 ;; simulator assignment protocol
 
@@ -193,16 +182,16 @@
 ;; get method interesting invokes and helpers
 ;; 
 
+
 (def ^:dynamic *init-instances*
-  "initial instance of classes with circumscription"
+  "initial instance of classes within circumscription"
   nil)
-
 (def ^:dynamic *simulator-global-state*
-  "initialized in initialize-classes to avoid unintentional retation"
+  "simulator's global state "
   nil)
-
 (defmacro with-simulator
   [& body]
+  ;; initialized here to avoid unintended retention across different runs
   `(binding [*init-instances* (atom nil)
              *simulator-global-state* (atom nil)]
      ~@body))
@@ -227,7 +216,7 @@
                             (catch Exception e
                               (set circumscription))))]
     (doseq [^SootClass class classes]
-      (swap! *init-instances* assoc-in [class]
+      (swap! *init-instances* assoc-in [(->> class get-soot-class-name)]
              (simulator-new-instance class))
       (doseq [^SootMethod clinit (.. (soot.EntryPoints/v) (clinitsOf class))]
         (try
@@ -259,7 +248,8 @@
                             (catch Exception e
                               (set circumscription))))]
     (try
-      (let [{:keys [explicit-invokes
+      (let [{:keys [returns
+                    explicit-invokes
                     implicit-invokes
                     component-invokes]}
             ;; full simulation
@@ -267,16 +257,15 @@
                               root-method
                               :this
                               ;; use initial instance if available
-                              (let [root-method-class (-> root-method get-soot-class)
+                              (let [root-method-class (->> root-method get-soot-class)
                                     instance (get-in @*init-instances*
-                                                     [root-method-class])]
+                                                     [(->> root-method get-soot-class-name)])]
                                 (if instance
                                   instance
                                   (simulator-new-instance root-method-class)))
                               :params
                               (->> (.. root-method getParameterTypes)
-                                   (map #(make-external-sexp :instance
-                                                             {:type %})))
+                                   (map #(make-external-sexp %)))
                               :interesting-method?
                               interesting-method?}
                              (assoc-in options [:circumscription]
@@ -307,11 +296,9 @@
     :or {circumscription :all}
     :as options}]
   
-  ;; method could be soot.SootMethodRef, so may need .resolve
-  (let [method (try
-                 (.. method resolve)
-                 (catch Exception e
-                   method))]
+  (let [method (try (soot-resolve method)
+                    (catch Exception e method))
+        default-return #{(make-invoke-sexp :invoke method this params)}]
     (cond
       ;;  safe invokes
       (try
@@ -320,7 +307,7 @@
               t (get safe-invokes class-name)]
           (or (= t :all)
               (contains? t method-name)))
-        (catch Exception e))
+        (catch Exception e false))
       {:returns (let [method-name (get-soot-name method)
                       class-name (get-soot-class-name method)]
                   (try
@@ -336,20 +323,13 @@
                       
                       #{result})
                     (catch Exception e
-                      #{(make-external-sexp :invoke
-                                            {:method method
-                                             :this this
-                                             :params params})})))
+                      default-return)))
        :explicit-invokes #{}
        :implicit-invokes #{}
        :component-invokes #{}}      
       
-      
       (not (instance? soot.SootMethod method))
-      {:returns #{(make-external-sexp :invoke
-                                      {:method method
-                                       :this this
-                                       :params params})}
+      {:returns default-return
        :explicit-invokes #{}
        :implicit-invokes #{}
        :component-invokes #{}}      
@@ -359,10 +339,7 @@
            (not (contains? circumscription
                            (.. method getSignature))))
       (do
-        {:returns #{(make-external-sexp :invoke
-                                        {:method method
-                                         :this this
-                                         :params params})}
+        {:returns default-return
          :explicit-invokes #{}
          :implicit-invokes #{}
          :component-invokes #{}})
@@ -378,7 +355,11 @@
          :component-invokes #{}})
 
       ;; no method body, cannot proceed
-      (not (.. method hasActiveBody))
+      (try
+        (.. method retrieveActiveBody)
+        false
+        (catch Exception e
+          true))
       (do
         {:returns #{(make-error-sexp :no-method-body
                                      {:method method
@@ -413,7 +394,7 @@
          (fn [worklist]
            (when (and @bb-budget
                       (> @bb-budget 0))
-             ;; width-first search to prevent malicious code exhaust bb-budget
+             ;; width-first search to prevent malicious code exhausting bb-budget
              (->> worklist
                   (mapcat (fn [{:keys [simulator start-stmt]}]
                             (let [{:keys [simulator next-start-stmts]}
@@ -459,6 +440,10 @@
   [{:keys [simulator stmt-info start-stmt method interesting-method?]
     :as simulation-params}
    {:keys [soot-method-simulation-depth-budget
+           soot-simulation-conservative-branching
+           soot-debug-show-each-statement
+           soot-debug-show-locals-per-statement
+           soot-debug-show-all-per-statement
            verbose]
     :as options}]
   (let [simulator (atom simulator)
@@ -473,6 +458,7 @@
                                  start-stmt)))]
     ;; simulate statements in the basic block
     (doseq [^Stmt stmt basic-block]
+
       (.. stmt
           (apply (proxy [StmtSwitch] []
                    (caseAssignStmt [stmt]
@@ -518,10 +504,18 @@
                    (caseTableSwitchStmt [stmt])
                    (caseThrowStmt [stmt])
                    (defaultCase [stmt]))))
-      (when (and verbose (> verbose 4))
-        (println "------")
+      (when (or soot-debug-show-each-statement
+                soot-debug-show-locals-per-statement
+                soot-debug-show-all-per-statement)
         (println stmt)
-        (pprint (:locals @simulator))))
+        (when (or soot-debug-show-locals-per-statement
+                  soot-debug-show-all-per-statement)
+          (println "- locals -")
+          (pprint (:locals @simulator))
+          (when soot-debug-show-all-per-statement
+            (println "- globals -")
+            (pprint @*simulator-global-state*))
+          (println "----------"))))
     (let [return (atom {:simulator nil ; to be filled at the end
                         :next-start-stmts #{}})
           ;; the first stmt of residue, if existed, is a brancher
@@ -546,17 +540,31 @@
                                                            options))                             
                              target-stmt (.. stmt getTarget)
                              next-stmt (second residue)]
-                         (if-not (extends? Sexp (class value))
-                           (if value
-                             ;; if value is true, take target-stmt
-                             (when target-stmt
+
+                         (if soot-simulation-conservative-branching
+                           ;; conservative branching
+                           ;; senstive to value
+                           ;; good: exact, eliminate dead branch
+                           ;; bad: may not cover enough branches when budget depelete
+                           (if-not (extends? Sexp (class value))
+                             (if value
+                               ;; if value is true, take target-stmt
+                               (when target-stmt
+                                 (swap! return update-in [:next-start-stmts]
+                                        conj target-stmt))
+                               ;; if value is false, take next-stmt
+                               (when next-stmt
+                                 (swap! return update-in [:next-start-stmts]
+                                        conj next-stmt)))
+                             ;; otherwise, take both stmts
+                             (doseq [stmt [next-stmt target-stmt]
+                                     :when stmt]
                                (swap! return update-in [:next-start-stmts]
-                                      conj target-stmt))
-                             ;; if value is false, take next-stmt
-                             (when next-stmt
-                               (swap! return update-in [:next-start-stmts]
-                                      conj next-stmt)))
-                           ;; otherwise, take both stmts
+                                      conj stmt)))
+                           ;; aggresive branching
+                           ;; insensitive to value
+                           ;; good: cover as much branches as possible
+                           ;; bad: not exact, may get into dead branch
                            (doseq [stmt [next-stmt target-stmt]
                                    :when stmt]
                              (swap! return update-in [:next-start-stmts]
@@ -618,6 +626,8 @@
    {:keys [soot-method-simulation-depth-budget
            soot-no-implicit-cf
            soot-dump-all-invokes
+           soot-debug-show-implicit-cf
+           soot-debug-show-safe-invokes
            layout-callbacks
            verbose]
     :as options}]
@@ -625,10 +635,11 @@
 
         ;; binary operation
         binary-operator-expr
-        (fn [expr operator]
+        (fn [expr operator operator-name]
           (let [op1 (-> (.. expr getOp1) (simulator-resolve-value @simulator))
                 op2 (-> (.. expr getOp2) (simulator-resolve-value @simulator))
-                default-return (make-binary-operator-sexp operator [op1 op2])]
+                default-return (make-binary-operator-sexp operator-name
+                                                          [op1 op2])]
             (try
               (operator op1 op2)
               (catch Exception e
@@ -637,9 +648,10 @@
         
         ;; unary operation
         unary-operator-expr
-        (fn [expr operator]
+        (fn [expr operator operator-name]
           (let [op (-> (.. expr getOp) (simulator-resolve-value @simulator))
-                default-return (make-unary-operator-sexp operator [op])]
+                default-return (make-unary-operator-sexp operator-name
+                                                         [op])]
             (try
               (operator op)
               (catch Exception e
@@ -738,9 +750,9 @@
                                                                                 method-name
                                                                                 (object-array args)))]
 
-                      (when (and verbose (> verbose 4))
-                        (prn "safe invoke:"
-                             class-name base-value method-name args result))
+                      (when soot-debug-show-safe-invokes
+                        (println "safe invoke:"
+                                 class-name base-value method-name args result))
                       result)
                     (catch Exception e
                       (invoke-method method base-value args)))
@@ -756,9 +768,10 @@
                         (when layout-callback
                           (let [info (dissoc layout-callback :method)]
                             (try
-                              (when-let [the-method (.. method-class
-                                                        (getMethodByNameUnsafe method))]
-                                (invoke-method the-method base-value [info]))
+                              (doseq [the-method (find-method-candidates method-class
+                                                                         method
+                                                                         [info])]
+                                (invoke-method the-method base-value [info])) 
                               (catch Exception e
                                 (print-stack-trace-if-verbose e verbose))))))))
 
@@ -786,17 +799,19 @@
                                                get-implicit-cf-root-class-names
                                                first)
                           x [root-class-name method-name]]
-                      (when (and verbose (> verbose 3))
+                      (when soot-debug-show-implicit-cf
                         (println "implicit cf:" x base-value args))
                       (cond
                         (#{["java.lang.Thread" "start"]
                            ["java.lang.Runnable" "run"]}
                          x)
                         (do
-                          (when-let [implicit-target (.. (:class base-value)
-                                                         (getMethodByNameUnsafe "run"))]
-                            (when (and verbose (> verbose 3))
-                              (println (format "%1$s.%2$s:"
+                          (doseq [implicit-target
+                                  (find-method-candidates (get-soot-class base-value)
+                                                          "run"
+                                                          [])]
+                            (when soot-debug-show-implicit-cf
+                              (println (format "implicit cf to: %1$s.%2$s:"
                                                root-class-name method-name)
                                        method-class
                                        base-value
@@ -805,29 +820,54 @@
 
                         (#{["java.util.concurrent.Callable" "call"]}
                          x)
-                        (when-let [implicit-target (.. method-class
-                                                       (getMethodByNameUnsafe "call"))]
+                        (doseq [implicit-target (find-method-candidates method-class
+                                                                        "call"
+                                                                        [])]
+                          (when soot-debug-show-implicit-cf
+                            (println (format "implicit cf to: %1$s.%2$s:"
+                                             root-class-name method-name)
+                                     method-class
+                                     base-value
+                                     implicit-target))                          
                           (invoke-method implicit-target base-value [] true))
 
                         (#{["java.util.concurrent.Executor" "execute"]
                            ["java.util.concurrent.ExecutorService" "execute"]}
                          x)
                         (let [target-obj (first args)]
-                          (when-let [implicit-target
-                                     (.. (-> target-obj get-soot-class)
-                                         (getMethodByNameUnsafe "run"))]
+                          (doseq [implicit-target
+                                  (find-method-candidates (get-soot-class target-obj)
+                                                          "run"
+                                                          [])]
+                            (println (format "implicit cf to: %1$s.%2$s:"
+                                             root-class-name method-name)
+                                     method-class
+                                     base-value
+                                     implicit-target)                          
                             (invoke-method implicit-target target-obj [] true)))
 
                         (#{["java.util.concurrent.ExecutorService" "submit"]}
                          x)
                         (let [target-obj (first args)]
-                          (when-let [implicit-target
-                                     (.. (-> target-obj get-soot-class)
-                                         (getMethodByNameUnsafe "run"))]
+                          (doseq [implicit-target
+                                  (find-method-candidates (get-soot-class target-obj)
+                                                          "run"
+                                                          [])]
+                            (println (format "implicit cf to: %1$s.%2$s:"
+                                             root-class-name method-name)
+                                     method-class
+                                     base-value
+                                     implicit-target)                            
                             (invoke-method implicit-target target-obj [] true))
-                          (when-let [implicit-target
-                                     (.. (-> target-obj get-soot-class)
-                                         (getMethodByNameUnsafe "call"))]
+                          (doseq [implicit-target
+                                  (find-method-candidates (get-soot-class target-obj)
+                                                          "call"
+                                                          [])]
+                            (println (format "implicit cf to: %1$s.%2$s:"
+                                             root-class-name method-name)
+                                     method-class
+                                     base-value
+                                     implicit-target)                            
                             (invoke-method implicit-target target-obj [] true)))
 
                         (#{["android.os.Handler" "post"]
@@ -836,9 +876,15 @@
                            ["android.os.Handler" "postDelayed"]}
                          x)
                         (let [target-obj (first args)]
-                          (when-let [implicit-target
-                                     (.. (-> target-obj get-soot-class)
-                                         (getMethodByNameUnsafe "run"))]
+                          (doseq [implicit-target
+                                  (find-method-candidates (get-soot-class target-obj)
+                                                          "run"
+                                                          [])]
+                            (println (format "implicit cf to: %1$s.%2$s:"
+                                             root-class-name method-name)
+                                     method-class
+                                     base-value
+                                     implicit-target)
                             (invoke-method implicit-target target-obj [] true)))
 
                         (#{["java.lang.Class" "forName"]}
@@ -854,15 +900,13 @@
                         (let [target-obj (first args)]
                           (try
                             ;; there could be more than one such method
-                            (let [candidates (->> (.. (-> base-value get-soot-class)
-                                                      (getMethods))
-                                                  (filter #(let [method %
-                                                                 target-name (str target-obj)]
-                                                             (= target-name
-                                                                (.. method getName)))))]
+                            (let [candidates
+                                  (find-method-candidates (get-soot-class base-value)
+                                                          (str target-obj)
+                                                          (count (second args)))]
                               (if-not (empty? candidates)
                                 candidates
-                                (make-method-sexp base-value target-obj))) 
+                                (make-method-sexp base-value target-obj)))
                             (catch Exception e
                               (make-method-sexp base-value target-obj))))
 
@@ -919,12 +963,8 @@
                                 "getDouble" "getFloat" "getInt" "getLong" "getShort"}
                               method-name))
                         (try
-                          (let [field (simulator-get-local @simulator base)
-                                value (simulator-get-field (simulator-get-this @simulator)
-                                                           field)]
-                            (when (and verbose (> verbose 3))
-                              (println (format "java.lang.reflect.Field.%1$s: %2$s=%3$s"
-                                               method-name field value)))
+                          (let [field base-value
+                                value (simulator-get-field nil base-value)]
                             value)
                           (catch Exception e
                             (make-field-sexp (simulator-get-this @simulator) base-value)))
@@ -932,9 +972,8 @@
                         (and (= "java.lang.reflect.Field" root-class-name)
                              (#{"equals"}) method-name)
                         (try
-                          (let [field (simulator-get-local @simulator base)
-                                value (simulator-get-field (simulator-get-this @simulator)
-                                                           field)]
+                          (let [field base-value
+                                value (simulator-get-field nil field)]
                             (= value (first args)))
                           (catch Exception e
                             (make-field-sexp (simulator-get-this @simulator)
@@ -945,15 +984,9 @@
                                 "setDouble" "setFloat" "setInt" "setLong" "setShort"}
                               method-name))
                         (try
-                          (let [field (simulator-get-local @simulator base)
+                          (let [field base-value
                                 value (first args)]
-                            (simulator-set-field (simulator-get-this @simulator)
-                                                 field value)                            
-                            (when (and verbose (> verbose 3))
-                              (println (format "java.lang.reflect.Field.%1$s: %2$s=%3$s"
-                                               method-name
-                                               field
-                                               value)))
+                            (simulator-set-field nil field value)
                             value)
                           (catch Exception e
                             (make-field-sexp (simulator-get-this @simulator) base-value)))
@@ -1059,27 +1092,27 @@
              ;; ExprSwitch
              (caseAddExpr [expr]
                (reset! result
-                       (binary-operator-expr expr +)))
+                       (binary-operator-expr expr + :add)))
              (caseAndExpr [expr]
                (reset! result
-                       (binary-operator-expr expr bit-and)))
+                       (binary-operator-expr expr bit-and :and)))
              (caseCastExpr [expr]
                ;; no effect on result
                )
              (caseCmpExpr [expr]
                (reset! result
-                       (binary-operator-expr expr compare)))
+                       (binary-operator-expr expr compare :cmp)))
              (caseCmpgExpr [expr]
                ;; JVM-specific artifacts; N/A on Dalvik
                (reset! result
-                       (binary-operator-expr expr compare)))
+                       (binary-operator-expr expr compare :cmpg)))
              (caseCmplExpr [expr]
                ;; JVM-specific artifacts; N/A on Dalvik
                (reset! result
-                       (binary-operator-expr expr compare)))
+                       (binary-operator-expr expr compare :cmpl)))
              (caseDivExpr [expr]
                (reset! result
-                       (binary-operator-expr expr /)))
+                       (binary-operator-expr expr / :div)))
              (caseDynamicInvokeExpr [expr]
                ;; JVM8 specific; N/A on Dalvik
                (reset! result
@@ -1096,13 +1129,14 @@
                           (if (and (not (extends? Sexp (class op1)))
                                    (not (extends? Sexp (class op2))))
                             (== op1 op2)
-                            (make-binary-operator-sexp == [op1 op2]))))))
+                            (make-binary-operator-sexp == [op1 op2])))
+                        :eq)))
              (caseGeExpr [expr]
                (reset! result
-                       (binary-operator-expr expr >=)))
+                       (binary-operator-expr expr >= :ge)))
              (caseGtExpr [expr]
                (reset! result
-                       (binary-operator-expr expr >)))
+                       (binary-operator-expr expr > :gt)))
              (caseInstanceOfExpr [expr]
                (reset! result
                        (let [check-type (-> (.. expr getCheckType) (simulator-resolve-value @simulator))
@@ -1138,16 +1172,16 @@
                                     (.. expr getArgs))))
              (caseLeExpr [expr]
                (reset! result
-                       (binary-operator-expr expr <=)))
+                       (binary-operator-expr expr <= :le)))
              (caseLengthExpr [expr]
                (reset! result
-                       (unary-operator-expr expr count)))
+                       (unary-operator-expr expr count :length)))
              (caseLtExpr [expr]
                (reset! result
-                       (binary-operator-expr expr <)))
+                       (binary-operator-expr expr < :lt)))
              (caseMulExpr [expr]
                (reset! result
-                       (binary-operator-expr expr *)))
+                       (binary-operator-expr expr * :mul)))
              (caseNeExpr [expr]
                (reset! result
                        ;; only non-sexp can be meaningfully compared                       
@@ -1157,10 +1191,11 @@
                           (if (and (not (extends? Sexp (class op1)))
                                    (not (extends? Sexp (class op2))))
                             (not= op1 op2)
-                            (make-binary-operator-sexp not= [op1 op2]))))))
+                            (make-binary-operator-sexp not= [op1 op2])))
+                        :ne)))
              (caseNegExpr [expr]
                (reset! result
-                       (unary-operator-expr expr -)))
+                       (unary-operator-expr expr - :neg)))
              (caseNewArrayExpr [expr]
                (reset! result
                        (let [base-type (-> (.. expr getBaseType)
@@ -1193,16 +1228,16 @@
                              default-return)))))
              (caseOrExpr [expr]
                (reset! result
-                       (binary-operator-expr expr bit-or)))
+                       (binary-operator-expr expr bit-or :or)))
              (caseRemExpr [expr]
                (reset! result
-                       (binary-operator-expr expr rem)))
+                       (binary-operator-expr expr rem :rem)))
              (caseShlExpr [expr]
                (reset! result
-                       (binary-operator-expr expr not=)))
+                       (binary-operator-expr expr not= :shl)))
              (caseShrExpr [expr]
                (reset! result
-                       (binary-operator-expr expr bit-shift-right)))
+                       (binary-operator-expr expr bit-shift-right :shr)))
              (caseSpecialInvokeExpr [expr]
                (reset! result
                        (invoke-expr :special-invoke
@@ -1217,10 +1252,10 @@
                                     (.. expr getArgs))))
              (caseSubExpr [expr]
                (reset! result
-                       (binary-operator-expr expr -)))
+                       (binary-operator-expr expr - :sub)))
              (caseUshrExpr [expr]
                (reset! result
-                       (binary-operator-expr expr unsigned-bit-shift-right)))
+                       (binary-operator-expr expr unsigned-bit-shift-right :ushr)))
              (caseVirtualInvokeExpr [expr]
                (reset! result
                        (invoke-expr :virtual-invoke
@@ -1229,7 +1264,7 @@
                                     (.. expr getArgs))))
              (caseXorExpr [expr]
                (reset! result
-                       (binary-operator-expr expr bit-xor)))
+                       (binary-operator-expr expr bit-xor :xor)))
              ;; RefSwitch
              (caseArrayRef [ref]
                (reset! result
@@ -1265,18 +1300,30 @@
 ;; :nil signify N/A
 (defn- simulator-get-field
   [instance field]
-  (let [class-name (-> field get-soot-class-name)
+  (let [field (-> field soot-resolve)
+        class-name (-> field get-soot-class-name)
         field-name (-> field get-soot-name)
-        field-id [class-name field-name]]
+        field-id [class-name field-name]
+        instance (cond
+                   (instance? woa.apk.dex.soot.sexp.InstanceSexp instance)
+                   (:instance instance)
+                   
+                   :otherwise instance)]
     (if (.. field isStatic)
       (get-in @*simulator-global-state* [:fields :static field-id] :nil)
       (get-in @*simulator-global-state* [:fields :instance instance field-id] :nil))))
 
 (defn- simulator-set-field
   [instance field value]
-  (let [class-name (-> field get-soot-class-name)
+  (let [field (-> field soot-resolve)
+        class-name (-> field get-soot-class-name)
         field-name (-> field get-soot-name)
-        field-id [class-name field-name]]
+        field-id [class-name field-name]
+        instance (cond
+                   (instance? woa.apk.dex.soot.sexp.InstanceSexp instance)
+                   (:instance instance)
+                   
+                   :otherwise instance)]
     (if (.. field isStatic)
       (swap! *simulator-global-state* assoc-in [:fields :static field-id] value)
       (swap! *simulator-global-state* assoc-in [:fields :instance instance field-id] value))))

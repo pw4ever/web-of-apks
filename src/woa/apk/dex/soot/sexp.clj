@@ -9,7 +9,8 @@
             [clojure.zip :as zip]
             [clojure.java.io :as io]
             [clojure.pprint :refer [pprint print-table]]
-            [clojure.stacktrace :refer [print-stack-trace]]))
+            [clojure.stacktrace :refer [print-stack-trace]])
+  (:import (clojure.lang IHashEq)))
 
 ;;; declaration
 
@@ -24,12 +25,12 @@
   [type info]
   (ErrorSexp. type info))
 
-(defrecord ExternalSexp [type info]
+(defrecord ExternalSexp [type]
   Sexp)
 
 (defn make-external-sexp
-  [type info]
-  (ExternalSexp. type info))
+  [type]
+  (ExternalSexp. type))
 
 (defrecord BinaryOperationSexp [operator operands]
   Sexp)
@@ -49,11 +50,18 @@
   Sexp
   SootQuery
   (get-soot-class [this]
-    (get-soot-class (:method this)))
+    (case invoke-type
+      :static-invoke (->> (:method this) get-soot-class)
+      (try
+        (->> (:base this) get-soot-class)
+        (catch Exception e
+          (->> (:method this) get-soot-class)))))
   (get-soot-class-name [this]
-    (get-soot-class-name (:method this)))
+    (->> this get-soot-class get-soot-name))
   (get-soot-name [this]
-    (get-soot-name [this])))
+    (->> (:method this) get-soot-name))
+  (soot-resolve [this]
+    (->> (:method this) soot-resolve)))
 
 (defn make-invoke-sexp
   [invoke-type method base args]
@@ -61,11 +69,16 @@
 
 (defrecord InstanceSexp [class instance]
   Sexp
+  Object
   SootQuery
   (get-soot-class [this]
-    (get-soot-class (:class this)))
+    (->> (:class this) get-soot-class))
   (get-soot-class-name [this]
-    (get-soot-class-name (:class this))))
+    (->> this get-soot-class get-soot-name))
+  (get-soot-name [this]
+    (->> this get-soot-class-name))
+  (soot-resolve [this]
+    (->> this get-soot-class soot-resolve)))
 
 (defn make-instance-sexp
   [class instance]
@@ -73,11 +86,16 @@
 
 (defrecord ClassSexp [class]
   Sexp
+  Object
   SootQuery
   (get-soot-class [this]
-    (get-soot-class (:class this)))
+    (->> (:class this) get-soot-class))
   (get-soot-class-name [this]
-    (get-soot-class-name (:class this))))
+    (->> this get-soot-class get-soot-name))
+  (get-soot-name [this]
+    (->> this get-soot-class-name))
+  (soot-resolve [this]
+    (->> this get-soot-class soot-resolve)))
 
 (defn make-class-sexp
   [class]
@@ -87,11 +105,13 @@
   Sexp
   SootQuery
   (get-soot-class [this]
-    (get-soot-class (:instance this)))
+    (->> (:instance this) get-soot-class))
   (get-soot-class-name [this]
-    (get-soot-class-name (:instance this)))
+    (->> this get-soot-class get-soot-name))
   (get-soot-name [this]
-    (get-soot-name (:method this))))
+    (->> (:method this) get-soot-name))
+  (soot-resolve [this]
+    (->> (:method this) soot-resolve)))
 
 (defn make-method-sexp
   [instance method]
@@ -101,11 +121,13 @@
   Sexp
   SootQuery
   (get-soot-class [this]
-    (get-soot-class (:instance this)))
+    (->> (:instance this) get-soot-class))
   (get-soot-class-name [this]
-    (get-soot-class-name (:instance this)))
+    (->> this get-soot-class get-soot-name))
   (get-soot-name [this]
-    (get-soot-name (:field this))))
+    (->> (:field this) get-soot-name))
+  (soot-resolve [this]
+    (->> (:field this) soot-resolve)))
 
 (defn make-field-sexp
   [instance field]
@@ -145,3 +167,10 @@
 (defn make-array-ref-sexp
   [base index]
   (ArrayRefSexp. base index))
+
+(defrecord ConstantSexp [const]
+  Sexp)
+
+(defn make-constant-sexp
+  [const]
+  (ConstantSexp. const))

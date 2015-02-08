@@ -72,10 +72,11 @@
    [nil "--soot-android-jar-path PATH" "path of android.jar for Soot's Dexpler"]
    [nil "--soot-basic-block-simulation-budget BUDGET" "basic block simulation budget"
     :parse-fn #(Long/parseLong %)
-    :default 100]
+    :default 50]
    [nil "--soot-method-simulation-depth-budget BUDGET" "method invocation simulation budget"
     :parse-fn #(Long/parseLong %)
     :default 10]
+   [nil "--soot-simulation-conservative-branching" "conservative branching: good: sensitive to conditions; bad: may not cover important branches before budget is depleted"]
    ["-j" "--soot-parallel-jobs JOBS"
     "number of concurrent threads for analyzing methods"
     :parse-fn #(Integer/parseInt %)
@@ -87,6 +88,12 @@
    [nil "--soot-no-implicit-cf" "do not detect implicit control flows (for comparison)"]
    [nil "--soot-dump-all-invokes" "dump all invokes"]
    [nil "--soot-result-exclude-app-methods" "exclude app internal methods from the result"]
+
+   [nil "--soot-debug-show-each-statement" "debug facility: show each processed statement"]
+   [nil "--soot-debug-show-locals-per-statement" "debug facility: show locals per each statement"]
+   [nil "--soot-debug-show-all-per-statement" "debug facility: show all per each statement"]
+   [nil "--soot-debug-show-implict-cf" "debug facility: show all implicit control flows"]
+   [nil "--soot-debug-show-safe-invokes" "debug facility: show all safe invokes"]   
    
    ["-d" "--dump-model FILE" "dump binary APK model; append dump file paths to FILE"]
    ["-l" "--load-model FILE" "load binary APK model; load from dump file paths in FILE"]

@@ -3803,7 +3803,8 @@ spec\s+resource\s+
                               (.. pool
                                   (execute
                                    (fn []
-                                     ;; impose lifecycle order on callbacks: https://developer.android.com/images/activity_lifecycle.png
+                                     ;; impose lifecycle order on callbacks
+                                     ;; https://developer.android.com/images/activity_lifecycle.png
                                      (let [callbacks
                                            (-&gt;&gt; (.. ^SootClass descendant getMethods)
                                                 (filter (fn [method]
@@ -3815,20 +3816,14 @@ spec\s+resource\s+
                                                            (let [order {&quot;onCreate&quot; 1
                                                                         &quot;onStart&quot; 2
                                                                         &quot;onResume&quot; 3
-                                                                        &quot;onPause&quot; 4
-                                                                        &quot;onStop&quot; 5
-                                                                        &quot;onRestart&quot; 6
-                                                                        &quot;onDestroy&quot; 7}
-                                                                 ox (get order x)
-                                                                 oy (get order y)]
-                                                             (cond
-                                                               (and (number? ox)
-                                                                    (number? oy))
-                                                               (compare ox oy)
-                                                               (nil? oy)
-                                                               -1
-                                                               (nil? ox)
-                                                               1)))))]
+                                                                        ;; others
+                                                                        &quot;onPause&quot; 5
+                                                                        &quot;onStop&quot; 6
+                                                                        &quot;onRestart&quot; 7
+                                                                        &quot;onDestroy&quot; 8}
+                                                                 ox (get order x 4)
+                                                                 oy (get order y 4)]
+                                                             (compare ox oy)))))]
                                        (try
                                          (doseq [callback callbacks]
                                            (let [callback-class (.. callback getDeclaringClass)]
@@ -3900,7 +3895,10 @@ spec\s+resource\s+
                                                                (swap! result update-in (conj path k)
                                                                       #(conj (set %1) %2) v))))))))))))
                                          (catch Exception e
-                                           (print-stack-trace-if-verbose e verbose))))))))
+                                           (print-stack-trace-if-verbose e verbose))
+                                         (catch Error e
+                                           ;; any error in processing; skip this sample
+                                           (.. pool shutdownNow))))))))
                             (.. pool shutdown)
                             (try
                               (when-not (.. pool (awaitTermination Integer/MAX_VALUE
@@ -4685,6 +4683,7 @@ spec\s+resource\s+
    {:keys [simulator interesting-method?]
     :as simulation-params}
    {:keys [soot-method-simulation-depth-budget
+           soot-simulation-collection-size-budget
            soot-no-implicit-cf
            soot-dump-all-invokes
            soot-debug-show-implicit-cf
@@ -4805,9 +4804,12 @@ spec\s+resource\s+
                       (when soot-debug-show-safe-invokes
                         (println &quot;safe invoke:&quot;
                                  class-name base-value method-name args result))
-                      result)
+                      (if (and (instance? java.util.Collection result)
+                               (&gt; (.size result) soot-simulation-collection-size-budget))
+                        default-return
+                        result))
                     (catch Exception e
-                      (invoke-method method base-value args)))
+                      default-return))
                   ;; setContentView
                   (= method-name &quot;setContentView&quot;)
                   (let [layout-id (first args)]
@@ -4824,7 +4826,9 @@ spec\s+resource\s+
                                                                          [info])]
                                 (invoke-method the-method base-value [info])) 
                               (catch Exception e
-                                (print-stack-trace-if-verbose e verbose))))))))
+                                default-return)))))
+                      :otherwise
+                      default-return))
                   ;; special-invokes
                   (= invoke-type :special-invoke)
                   (try
@@ -4837,8 +4841,9 @@ spec\s+resource\s+
                       (simulator-assign base
                                         (simulator-new-instance method-class)
                                         simulator))
+                    default-return
                     (catch Exception e
-                      (print-stack-trace e)))
+                      default-return))
                   ;; implicit cf: task
                   (and (not soot-no-implicit-cf)
                        (implicit-cf-task? method))
@@ -4967,12 +4972,12 @@ spec\s+resource\s+
                                       invoke-args (second args)]
                                   (when (= (count invoke-args)
                                            (.. method getParameterCount))
-                                    (when (and verbose (&gt; verbose 3))
-                                      (println (format &quot;%1$s.%2$s:&quot;
+                                    (when soot-debug-show-implicit-cf
+                                      (println (format &quot;implicit cf to: %1$s.%2$s:&quot;
                                                        root-class-name method-name)
                                                method
                                                invoke-instance
-                                               invoke-args))                                  
+                                               invoke-args))
                                     (when-let [r (try
                                                    (invoke-method method
                                                                   invoke-instance
@@ -5031,9 +5036,9 @@ spec\s+resource\s+
                             value)
                           (catch Exception e
                             (make-field-sexp (simulator-get-this @simulator) base-value)))
-                        :default (invoke-method method base-value args true)))
+                        :default default-return))
                     (catch Exception e
-                       (invoke-method method base-value args true)))
+                      default-return))
                   ;; implicit cf: component
                   (and (not soot-no-implicit-cf)
                        (implicit-cf-component? method))
@@ -5043,47 +5048,46 @@ spec\s+resource\s+
                                                first)
                           x [root-class-name method-name]]
                       (cond
-;;                   (#{[&quot;android.content.Context&quot; &quot;startActivity&quot;]
-;;                      [&quot;android.content.Context&quot; &quot;startActivities&quot;]}
-;;                    x)
-;;                   (update-result :category :component
-;;                                  :type &quot;android.app.Activity&quot;
-;;                                  :instance (with-out-str (pr (first args))))
-;;                   (#{[&quot;android.content.Context&quot; &quot;startService&quot;]
-;;                      [&quot;android.content.Context&quot; &quot;stopService&quot;]
-;;                      [&quot;android.content.Context&quot; &quot;bindService&quot;]
-;;                      [&quot;android.content.Context&quot; &quot;unbindService&quot;]}
-;;                    x)
-;;                   (update-result :category :component
-;;                                  :type &quot;android.app.Service&quot;
-;;                                  :instance (with-out-str (pr (first args))))
-;;                   (#{[&quot;android.content.Context&quot; &quot;sendBroadcast&quot;]
-;;                      [&quot;android.content.Context&quot; &quot;sendBrocastAsUser&quot;]
-;;                      [&quot;android.content.Context&quot; &quot;sendOrderedBroadcast&quot;]
-;;                      [&quot;android.content.Context&quot; &quot;sendOrderedBroadcastAsUser&quot;]
-;;                      [&quot;android.content.Context&quot; &quot;sendStickyBroadcast&quot;]
-;;                      [&quot;android.content.Context&quot; &quot;sendStickyBroadcastAsUser&quot;]}
-;;                    x)
-;;                   (update-result :category :component
-;;                                  :type &quot;android.content.BroadcastReceiver&quot;
-;;                                  :instance (with-out-str (pr (first args))))
-;;                   (#{[&quot;android.content.Context&quot; &quot;registerComponentCallbacks&quot;]}
-;;                    x)
-;;                   (update-result :category :component
-;;                                  :type &quot;android.content.ComponentCallbacks&quot;
-;;                                  :instance (with-out-str (pr (first args))))
-;;                   (#{[&quot;android.content.Context&quot; &quot;registerReceiver&quot;]}
-;;                    x)
-;;                   (update-result :category :component
-;;                                  :type &quot;android.content.BroadcastReceiver&quot;
-;;                                  :instance (with-out-str (pr args))))))))
-                        :default (invoke-method method base-value args true)))
+                        ;;                   (#{[&quot;android.content.Context&quot; &quot;startActivity&quot;]
+                        ;;                      [&quot;android.content.Context&quot; &quot;startActivities&quot;]}
+                        ;;                    x)
+                        ;;                   (update-result :category :component
+                        ;;                                  :type &quot;android.app.Activity&quot;
+                        ;;                                  :instance (with-out-str (pr (first args))))
+                        ;;                   (#{[&quot;android.content.Context&quot; &quot;startService&quot;]
+                        ;;                      [&quot;android.content.Context&quot; &quot;stopService&quot;]
+                        ;;                      [&quot;android.content.Context&quot; &quot;bindService&quot;]
+                        ;;                      [&quot;android.content.Context&quot; &quot;unbindService&quot;]}
+                        ;;                    x)
+                        ;;                   (update-result :category :component
+                        ;;                                  :type &quot;android.app.Service&quot;
+                        ;;                                  :instance (with-out-str (pr (first args))))
+                        ;;                   (#{[&quot;android.content.Context&quot; &quot;sendBroadcast&quot;]
+                        ;;                      [&quot;android.content.Context&quot; &quot;sendBrocastAsUser&quot;]
+                        ;;                      [&quot;android.content.Context&quot; &quot;sendOrderedBroadcast&quot;]
+                        ;;                      [&quot;android.content.Context&quot; &quot;sendOrderedBroadcastAsUser&quot;]
+                        ;;                      [&quot;android.content.Context&quot; &quot;sendStickyBroadcast&quot;]
+                        ;;                      [&quot;android.content.Context&quot; &quot;sendStickyBroadcastAsUser&quot;]}
+                        ;;                    x)
+                        ;;                   (update-result :category :component
+                        ;;                                  :type &quot;android.content.BroadcastReceiver&quot;
+                        ;;                                  :instance (with-out-str (pr (first args))))
+                        ;;                   (#{[&quot;android.content.Context&quot; &quot;registerComponentCallbacks&quot;]}
+                        ;;                    x)
+                        ;;                   (update-result :category :component
+                        ;;                                  :type &quot;android.content.ComponentCallbacks&quot;
+                        ;;                                  :instance (with-out-str (pr (first args))))
+                        ;;                   (#{[&quot;android.content.Context&quot; &quot;registerReceiver&quot;]}
+                        ;;                    x)
+                        ;;                   (update-result :category :component
+                        ;;                                  :type &quot;android.content.BroadcastReceiver&quot;
+                        ;;                                  :instance (with-out-str (pr args))))))))
+                        :default default-return))
                     (catch Exception e
-                      (invoke-method method base-value args true)))
+                      default-return))
                   :default
                   (invoke-method method base-value args)))
               (catch Exception e
-                (print-stack-trace-if-verbose e verbose 4)
                 default-return))))]
     (try
       (.. expr
@@ -5231,8 +5235,10 @@ spec\s+resource\s+
                                       (simulator-resolve-value @simulator))
                              default-return (make-new-array-sexp base-type size)]
                          (try
-                           (-&gt;&gt; (repeat size nil)
-                                vec)
+                           (if (&lt; size soot-simulation-collection-size-budget)
+                             (-&gt;&gt; (repeat size nil)
+                                  vec)
+                             default-return)
                            (catch Exception e
                              (print-stack-trace-if-verbose e verbose 4)
                              default-return)))))
@@ -5245,10 +5251,13 @@ spec\s+resource\s+
                              sizes (-&gt;&gt; (.. expr getSize)
                                         (map #(simulator-resolve-value % @simulator))
                                         vec)
+                             size (reduce * sizes)
                              default-return (make-new-multi-array-sexp base-type sizes)]
                          (try
-                           (-&gt;&gt; (repeat (reduce * sizes) nil)
-                                vec)
+                           (if (&lt; size soot-simulation-collection-size-budget)
+                             (-&gt;&gt; (repeat size nil)
+                                  vec)
+                             default-return)
                            (catch Exception e
                              (print-stack-trace-if-verbose e verbose 4)
                              default-return)))))
@@ -6128,6 +6137,9 @@ spec\s+resource\s+
    [nil &quot;--soot-method-simulation-depth-budget BUDGET&quot; &quot;method invocation simulation budget&quot;
     :parse-fn #(Long/parseLong %)
     :default 10]
+   [nil &quot;--soot-simulation-collection-size-budget BUDGET&quot; &quot;array size simulation budget&quot;
+    :parse-fn #(Long/parseLong %)
+    :default 100]   
    [nil &quot;--soot-simulation-conservative-branching&quot; &quot;conservative branching: good: sensitive to conditions; bad: may not cover important branches before budget is depleted&quot;]
    [&quot;-j&quot; &quot;--soot-parallel-jobs JOBS&quot;
     &quot;number of concurrent threads for analyzing methods&quot;
@@ -6423,11 +6435,12 @@ spec\s+resource\s+
               (when line
                 ;; ex.: {:file-path &quot;a/b.apk&quot; :tags [{[&quot;Dataset&quot;] {&quot;id&quot; &quot;dst-my&quot; &quot;name&quot; &quot;my dataset&quot;}}]}
                 ;; tags must have &quot;id&quot; node property
-                (let [{:keys [file-path tags] :as task} (try
-                                                          (read-string line)
-                                                          (catch Exception e
-                                                            (print-stack-trace-if-verbose e verbose)
-                                                            nil))]
+                (let [{:keys [file-path tags] :as task}
+                      (try
+                        (read-string line)
+                        (catch Exception e
+                          (print-stack-trace-if-verbose e verbose)
+                          nil))]
                   (try
                     (when (and file-path (fs/readable? file-path))
                       (work task options))

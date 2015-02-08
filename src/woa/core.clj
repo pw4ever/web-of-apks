@@ -76,6 +76,9 @@
    [nil "--soot-method-simulation-depth-budget BUDGET" "method invocation simulation budget"
     :parse-fn #(Long/parseLong %)
     :default 10]
+   [nil "--soot-simulation-collection-size-budget BUDGET" "array size simulation budget"
+    :parse-fn #(Long/parseLong %)
+    :default 100]   
    [nil "--soot-simulation-conservative-branching" "conservative branching: good: sensitive to conditions; bad: may not cover important branches before budget is depleted"]
    ["-j" "--soot-parallel-jobs JOBS"
     "number of concurrent threads for analyzing methods"
@@ -414,11 +417,12 @@
               (when line
                 ;; ex.: {:file-path "a/b.apk" :tags [{["Dataset"] {"id" "dst-my" "name" "my dataset"}}]}
                 ;; tags must have "id" node property
-                (let [{:keys [file-path tags] :as task} (try
-                                                          (read-string line)
-                                                          (catch Exception e
-                                                            (print-stack-trace-if-verbose e verbose)
-                                                            nil))]
+                (let [{:keys [file-path tags] :as task}
+                      (try
+                        (read-string line)
+                        (catch Exception e
+                          (print-stack-trace-if-verbose e verbose)
+                          nil))]
                   (try
                     (when (and file-path (fs/readable? file-path))
                       (work task options))

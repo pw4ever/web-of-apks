@@ -206,7 +206,8 @@
                               (.. pool
                                   (execute
                                    (fn []
-                                     ;; impose lifecycle order on callbacks: https://developer.android.com/images/activity_lifecycle.png
+                                     ;; impose lifecycle order on callbacks
+                                     ;; https://developer.android.com/images/activity_lifecycle.png
                                      (let [callbacks
                                            (->> (.. ^SootClass descendant getMethods)
                                                 (filter (fn [method]
@@ -218,22 +219,14 @@
                                                            (let [order {"onCreate" 1
                                                                         "onStart" 2
                                                                         "onResume" 3
-                                                                        "onPause" 4
-                                                                        "onStop" 5
-                                                                        "onRestart" 6
-                                                                        "onDestroy" 7}
-                                                                 ox (get order x)
-                                                                 oy (get order y)]
-                                                             (cond
-                                                               (and (number? ox)
-                                                                    (number? oy))
-                                                               (compare ox oy)
-
-                                                               (nil? oy)
-                                                               -1
-
-                                                               (nil? ox)
-                                                               1)))))]
+                                                                        ;; others
+                                                                        "onPause" 5
+                                                                        "onStop" 6
+                                                                        "onRestart" 7
+                                                                        "onDestroy" 8}
+                                                                 ox (get order x 4)
+                                                                 oy (get order y 4)]
+                                                             (compare ox oy)))))]
                                        (try
                                          (doseq [callback callbacks]
                                            (let [callback-class (.. callback getDeclaringClass)]
@@ -307,7 +300,10 @@
                                                                (swap! result update-in (conj path k)
                                                                       #(conj (set %1) %2) v))))))))))))
                                          (catch Exception e
-                                           (print-stack-trace-if-verbose e verbose))))))))
+                                           (print-stack-trace-if-verbose e verbose))
+                                         (catch Error e
+                                           ;; any error in processing; skip this sample
+                                           (.. pool shutdownNow))))))))
                             (.. pool shutdown)
                             (try
                               (when-not (.. pool (awaitTermination Integer/MAX_VALUE

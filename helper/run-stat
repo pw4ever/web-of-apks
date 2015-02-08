@@ -8,7 +8,7 @@ if [[ "x$PREFIX" == "x" ]]; then
 fi
 
 while :; do
-  du -sh ${PREFIX}*.dump
+  ls *.model-dump | wc -l
   wc -l ${PREFIX}*.dump
   sleep 60
 done

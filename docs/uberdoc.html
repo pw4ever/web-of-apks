@@ -3652,9 +3652,9 @@ spec\s+resource\s+
            (soot.jimple Stmt)
            (soot.options Options)))</pre></td></tr><tr><td class="docs"><p>declaration</p>
 </td><td class="codes"></td></tr><tr><td class="docs"><p>func</p>
-</td><td class="codes"></td></tr><tr><td class="docs">
-</td><td class="codes"><pre class="brush: clojure">(declare parse-apk
-         get-apk-interesting-invokes)</pre></td></tr><tr><td class="docs"><p>implementation</p>
+</td><td class="codes"></td></tr><tr><td class="docs"><p>public</p>
+</td><td class="codes"><pre class="brush: clojure">(declare parse-apk get-apk-interesting-invokes)</pre></td></tr><tr><td class="docs"><p>private</p>
+</td><td class="codes"><pre class="brush: clojure">(declare prettify-args)</pre></td></tr><tr><td class="docs"><p>implementation</p>
 </td><td class="codes"></td></tr><tr><td class="docs"><p>parse apk with soot</p>
 </td><td class="codes"><pre class="brush: clojure">(defn parse-apk
   [apk-name options]
@@ -3918,7 +3918,72 @@ spec\s+resource\s+
             (print-stack-trace-if-verbose e verbose))
           (finally
             (unmute))))
-      @result)))</pre></td></tr><tr><td class="spacer docs">&nbsp;</td><td class="codes" /></tr><tr><td class="docs"><div class="docs-header"><a class="anchor" href="#woa.apk.dex.soot.sexp" name="woa.apk.dex.soot.sexp"><h1 class="project-name">woa.apk.dex.soot.sexp</h1><a class="toc-link" href="#toc">toc</a></a></div></td><td class="codes" /></tr><tr><td class="docs"><p>define symbolic expression (sexp)</p>
+      @result)))</pre></td></tr><tr><td class="docs"><p>prettify results</p>
+</td><td class="codes"><pre class="brush: clojure">(defn- prettify-args
+  [args]
+  (try
+    (cond
+      (instance? woa.apk.dex.soot.sexp.ErrorSexp args)
+      (list (prettify-args (:type args)) (prettify-args (:info args)))
+      (instance? woa.apk.dex.soot.sexp.ExternalSexp args)
+      (list :instance (prettify-args (:type args)))
+      (or (instance? woa.apk.dex.soot.sexp.BinaryOperationSexp args)
+          (instance? woa.apk.dex.soot.sexp.UnaryOperationSexp args))
+      (list* (:operator args)
+             (map prettify-args (:operands args)))
+      (instance? woa.apk.dex.soot.sexp.InvokeSexp args)
+      (list :invoke
+            (prettify-args (:method args))
+            (prettify-args (:base args))
+            (prettify-args (:args args)))
+      (instance? woa.apk.dex.soot.sexp.InstanceSexp args)
+      (list :instance (prettify-args (:instance args)))
+      (instance? woa.apk.dex.soot.sexp.MethodSexp args)
+      (list :method (prettify-args (:method args)))
+      (instance? woa.apk.dex.soot.sexp.FieldSexp args)
+      (list :field (prettify-args (:field args)))
+      (instance? woa.apk.dex.soot.sexp.InstanceOfSexp args)
+      (list :instance-of
+            (prettify-args (:class args))
+            (prettify-args (:instance args)))
+      (instance? woa.apk.dex.soot.sexp.NewArraySexp args)
+      (list :new-array
+            (prettify-args (:base-type args))
+            (prettify-args (:size args)))
+      (instance? woa.apk.dex.soot.sexp.NewMultiArraySexp args)
+      (list :new-multi-array
+            (prettify-args (:base-type args))
+            (prettify-args (:sizes args)))
+      (instance? woa.apk.dex.soot.sexp.ArrayRefSexp args)
+      (list :array-ref
+            (prettify-args (:base args))
+            (prettify-args (:index args)))
+      (instance? woa.apk.dex.soot.sexp.ConstantSexp args)
+      (list :constant
+            (prettify-args (:const args)))
+      (or (instance? soot.SootClass args))
+      (list :class (get-soot-name args))
+      (or (instance? soot.SootMethod args)
+          (instance? soot.SootMethodRef args))
+      (list :method (str (get-soot-class-name args)
+                         &quot;.&quot;
+                         (get-soot-name args)))
+      (or (instance? soot.SootField args)
+          (instance? soot.SootMethodRef args))
+      (list :field (str (get-soot-class-name args)
+                        &quot;.&quot;
+                        (get-soot-name args)))
+      (soot-queryable? args)
+      (-&gt;&gt; args get-soot-name)
+      (and (not (instance? woa.apk.dex.soot.sexp.Sexp args))
+           (coll? args))
+      (-&gt;&gt; args
+           (map prettify-args)
+           (into (empty args)))    
+      :otherwise
+      args)
+    (catch Exception e
+      args)))</pre></td></tr><tr><td class="spacer docs">&nbsp;</td><td class="codes" /></tr><tr><td class="docs"><div class="docs-header"><a class="anchor" href="#woa.apk.dex.soot.sexp" name="woa.apk.dex.soot.sexp"><h1 class="project-name">woa.apk.dex.soot.sexp</h1><a class="toc-link" href="#toc">toc</a></a></div></td><td class="codes" /></tr><tr><td class="docs"><p>define symbolic expression (sexp)</p>
 </td><td class="codes"><pre class="brush: clojure">(ns woa.apk.dex.soot.sexp
   ;; internal libs
   (:use woa.apk.dex.soot.util)
@@ -5652,73 +5717,7 @@ spec\s+resource\s+
   (get-soot-name [this]
     (-&gt;&gt; (.. this getFieldRef) get-soot-name))
   (soot-resolve [this]
-    (.. this getField)))</pre></td></tr><tr><td class="docs"><p>general helpers</p>
-</td><td class="codes"></td></tr><tr><td class="docs"><p>prettify results</p>
-</td><td class="codes"><pre class="brush: clojure">(defn prettify-args
-  [args]
-  (try
-    (cond
-      (instance? woa.apk.dex.soot.sexp.ErrorSexp args)
-      (list (prettify-args (:type args)) (prettify-args (:info args)))
-      (instance? woa.apk.dex.soot.sexp.ExternalSexp args)
-      (list :instance (prettify-args (:type args)))
-      (or (instance? woa.apk.dex.soot.sexp.BinaryOperationSexp args)
-          (instance? woa.apk.dex.soot.sexp.UnaryOperationSexp args))
-      (list* (:operator args)
-             (map prettify-args (:operands args)))
-      (instance? woa.apk.dex.soot.sexp.InvokeSexp args)
-      (list :invoke
-            (prettify-args (:method args))
-            (prettify-args (:base args))
-            (prettify-args (:args args)))
-      (instance? woa.apk.dex.soot.sexp.InstanceSexp args)
-      (list :instance (prettify-args (:instance args)))
-      (instance? woa.apk.dex.soot.sexp.MethodSexp args)
-      (list :method (prettify-args (:method args)))
-      (instance? woa.apk.dex.soot.sexp.FieldSexp args)
-      (list :field (prettify-args (:field args)))
-      (instance? woa.apk.dex.soot.sexp.InstanceOfSexp args)
-      (list :instance-of
-            (prettify-args (:class args))
-            (prettify-args (:instance args)))
-      (instance? woa.apk.dex.soot.sexp.NewArraySexp args)
-      (list :new-array
-            (prettify-args (:base-type args))
-            (prettify-args (:size args)))
-      (instance? woa.apk.dex.soot.sexp.NewMultiArraySexp args)
-      (list :new-multi-array
-            (prettify-args (:base-type args))
-            (prettify-args (:sizes args)))
-      (instance? woa.apk.dex.soot.sexp.ArrayRefSexp args)
-      (list :array-ref
-            (prettify-args (:base args))
-            (prettify-args (:index args)))
-      (instance? woa.apk.dex.soot.sexp.ConstantSexp args)
-      (list :constant
-            (prettify-args (:const args)))
-      (or (instance? soot.SootClass args))
-      (list :class (get-soot-name args))
-      (or (instance? soot.SootMethod args)
-          (instance? soot.SootMethodRef args))
-      (list :method (str (get-soot-class-name args)
-                         &quot;.&quot;
-                         (get-soot-name args)))
-      (or (instance? soot.SootField args)
-          (instance? soot.SootMethodRef args))
-      (list :field (str (get-soot-class-name args)
-                        &quot;.&quot;
-                        (get-soot-name args)))
-      (soot-queryable? args)
-      (-&gt;&gt; args get-soot-name)
-      (and (not (instance? woa.apk.dex.soot.sexp.Sexp args))
-           (coll? args))
-      (-&gt;&gt; args
-           (map prettify-args)
-           (into (empty args)))    
-      :otherwise
-      args)
-    (catch Exception e
-      args)))</pre></td></tr><tr><td class="docs"><p>Soot Method helper</p>
+    (.. this getField)))</pre></td></tr><tr><td class="docs"><p>Soot Method helper</p>
 </td><td class="codes"></td></tr><tr><td class="docs"><p>args=nil: all method of the-class with method-name; otherwise: match by argument numbers</p>
 </td><td class="codes"><pre class="brush: clojure">(defn find-method-candidates
   [the-class method-name args]

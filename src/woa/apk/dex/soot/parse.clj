@@ -36,8 +36,11 @@
 
 ;; func
 
-(declare parse-apk
-         get-apk-interesting-invokes)
+;; public
+(declare parse-apk get-apk-interesting-invokes)
+
+;; private
+(declare prettify-args)
 
 ;;; implementation
 
@@ -324,3 +327,87 @@
           (finally
             (unmute))))
       @result)))
+
+(defn- prettify-args
+  "prettify results"
+  [args]
+  (try
+    (cond
+      (instance? woa.apk.dex.soot.sexp.ErrorSexp args)
+      (list (prettify-args (:type args)) (prettify-args (:info args)))
+      
+      (instance? woa.apk.dex.soot.sexp.ExternalSexp args)
+      (list :instance (prettify-args (:type args)))
+
+      (or (instance? woa.apk.dex.soot.sexp.BinaryOperationSexp args)
+          (instance? woa.apk.dex.soot.sexp.UnaryOperationSexp args))
+      (list* (:operator args)
+             (map prettify-args (:operands args)))
+
+      (instance? woa.apk.dex.soot.sexp.InvokeSexp args)
+      (list :invoke
+            (prettify-args (:method args))
+            (prettify-args (:base args))
+            (prettify-args (:args args)))
+      
+      (instance? woa.apk.dex.soot.sexp.InstanceSexp args)
+      (list :instance (prettify-args (:instance args)))
+      
+      (instance? woa.apk.dex.soot.sexp.MethodSexp args)
+      (list :method (prettify-args (:method args)))
+
+      (instance? woa.apk.dex.soot.sexp.FieldSexp args)
+      (list :field (prettify-args (:field args)))
+
+      (instance? woa.apk.dex.soot.sexp.InstanceOfSexp args)
+      (list :instance-of
+            (prettify-args (:class args))
+            (prettify-args (:instance args)))
+
+      (instance? woa.apk.dex.soot.sexp.NewArraySexp args)
+      (list :new-array
+            (prettify-args (:base-type args))
+            (prettify-args (:size args)))
+
+      (instance? woa.apk.dex.soot.sexp.NewMultiArraySexp args)
+      (list :new-multi-array
+            (prettify-args (:base-type args))
+            (prettify-args (:sizes args)))
+
+      (instance? woa.apk.dex.soot.sexp.ArrayRefSexp args)
+      (list :array-ref
+            (prettify-args (:base args))
+            (prettify-args (:index args)))
+
+      (instance? woa.apk.dex.soot.sexp.ConstantSexp args)
+      (list :constant
+            (prettify-args (:const args)))
+
+      (or (instance? soot.SootClass args))
+      (list :class (get-soot-name args))
+
+      (or (instance? soot.SootMethod args)
+          (instance? soot.SootMethodRef args))
+      (list :method (str (get-soot-class-name args)
+                         "."
+                         (get-soot-name args)))
+
+      (or (instance? soot.SootField args)
+          (instance? soot.SootMethodRef args))
+      (list :field (str (get-soot-class-name args)
+                        "."
+                        (get-soot-name args)))
+      
+      (soot-queryable? args)
+      (->> args get-soot-name)
+
+      (and (not (instance? woa.apk.dex.soot.sexp.Sexp args))
+           (coll? args))
+      (->> args
+           (map prettify-args)
+           (into (empty args)))    
+      
+      :otherwise
+      args)
+    (catch Exception e
+      args)))

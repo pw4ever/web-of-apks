@@ -44,7 +44,8 @@
          simulator-add-returns simulator-get-returns simulator-clear-returns
          simulator-add-explicit-invokes simulator-get-explicit-invokes simulator-clear-explicit-invokes
          simulator-add-implicit-invokes simulator-get-implicit-invokes simulator-clear-implicit-invokes
-         simulator-add-component-invokes simulator-get-component-invokes simulator-clear-component-invokes)
+         simulator-add-component-invokes simulator-get-component-invokes simulator-clear-component-invokes
+         simulator-add-invoke-paths simulator-get-invoke-paths simulator-clear-invoke-paths)
 (declare filter-implicit-cf-invoke-methods
          implicit-cf-class? implicit-cf? implicit-cf-task? implicit-cf-component? 
          get-transitive-implicit-cf-super-class-and-interface get-implicit-cf-root-class-names)
@@ -238,6 +239,7 @@
   (let [all-explicit-invokes (atom #{})
         all-implicit-invokes (atom #{})
         all-component-invokes (atom #{})
+        all-invoke-paths (atom nil)
         ;; soot.SootMethod cannot be reliably compared for value (as in a set)
         circumscription (if (= circumscription :all)
                           circumscription
@@ -251,7 +253,8 @@
       (let [{:keys [returns
                     explicit-invokes
                     implicit-invokes
-                    component-invokes]}
+                    component-invokes
+                    invoke-paths]}
             ;; full simulation
             (simulate-method {:method
                               root-method
@@ -277,13 +280,15 @@
         (swap! all-implicit-invokes into
                implicit-invokes)
         (swap! all-component-invokes into
-               component-invokes))
+               component-invokes)
+        (reset! all-invoke-paths invoke-paths))
       (catch Exception e
         (print-stack-trace-if-verbose e verbose 3)))
     ;; return result
     {:explicit-invokes @all-explicit-invokes
      :implicit-invokes @all-implicit-invokes
-     :component-invokes @all-component-invokes}))
+     :component-invokes @all-component-invokes
+     :invoke-paths @all-invoke-paths}))
 
 (defn- simulate-method
   "simulate method"
@@ -298,6 +303,9 @@
   
   (let [method (try (soot-resolve method)
                     (catch Exception e method))
+        method-name (try
+                      (.. method getSignature)
+                      (catch Exception e))
         default-return #{(make-invoke-sexp :invoke method this params)}]
     (cond
       ;;  safe invokes
@@ -326,13 +334,15 @@
                       default-return)))
        :explicit-invokes #{}
        :implicit-invokes #{}
-       :component-invokes #{}}      
+       :component-invokes #{}
+       :invoke-paths method-name}      
       
       (not (instance? soot.SootMethod method))
       {:returns default-return
        :explicit-invokes #{}
        :implicit-invokes #{}
-       :component-invokes #{}}      
+       :component-invokes #{}
+       :invoke-paths method-name}      
       
       ;; only simulate method within circumscription
       (and (not= circumscription :all)
@@ -342,7 +352,8 @@
         {:returns default-return
          :explicit-invokes #{}
          :implicit-invokes #{}
-         :component-invokes #{}})
+         :component-invokes #{}
+         :invoke-paths method-name})
       
       (< soot-method-simulation-depth-budget 0)
       (do
@@ -352,7 +363,8 @@
                                       :params params})}
          :explicit-invokes #{}
          :implicit-invokes #{}
-         :component-invokes #{}})
+         :component-invokes #{}
+         :invoke-paths method-name})
 
       ;; no method body, cannot proceed
       (try
@@ -367,13 +379,16 @@
                                       :params params})}
          :explicit-invokes #{}
          :implicit-invokes #{}
-         :component-invokes #{}})
+         :component-invokes #{}
+         :invoke-paths method-name})
 
       :otherwise
       (let [all-returns (atom #{})
             all-explicit-invokes (atom #{})
             all-implicit-invokes (atom #{})
             all-component-invokes (atom #{})
+            all-invoke-paths (atom (when method-name
+                                     {method-name #{}}))
             
             body (.. method getActiveBody)
 
@@ -418,6 +433,11 @@
                               (swap! all-component-invokes into
                                      (-> simulator
                                          simulator-get-component-invokes))
+                              (when method-name
+                                (swap! all-invoke-paths update-in [method-name]
+                                       into
+                                       (-> simulator
+                                           simulator-get-invoke-paths)))
                               ;; add the following to worklist
                               (for [start-stmt (set next-start-stmts)]
                                 ;; control flow sensitive!
@@ -425,12 +445,16 @@
                                                 simulator-clear-returns
                                                 simulator-clear-explicit-invokes
                                                 simulator-clear-implicit-invokes
-                                                simulator-clear-component-invokes)
+                                                simulator-clear-component-invokes
+                                                simulator-clear-invoke-paths)
                                  :start-stmt start-stmt}))))))))
         {:returns @all-returns
          :explicit-invokes @all-explicit-invokes
          :implicit-invokes @all-implicit-invokes
-         :component-invokes @all-component-invokes}))))
+         :component-invokes @all-component-invokes
+         :invoke-paths (if (empty? (get-in @all-invoke-paths [method-name]))
+                         method-name
+                         @all-invoke-paths)}))))
 
 (defn- simulate-basic-block
   "simulate a basic block"
@@ -596,7 +620,7 @@
   [;; for a method frame
    this params locals returns
    ;; during simulation
-   explicit-invokes implicit-invokes component-invokes])
+   explicit-invokes implicit-invokes component-invokes invoke-paths])
 
 (defn- create-simulator
   [this params]
@@ -606,7 +630,8 @@
                    :returns #{}
                    :explicit-invokes #{}
                    :implicit-invokes #{}
-                   :component-invokes #{}}))
+                   :component-invokes #{}
+                   :invoke-paths #{}}))
 
 (defn- simulator-new-instance
   [& [class]]
@@ -682,51 +707,52 @@
                            :args args}])))
 
               (let [invoke-method (fn [method this params & [implicit?]]
-                                    (if (instance? woa.apk.dex.soot.sexp.MethodSexp
-                                                   method)
-                                      (do
-                                        (doto simulator
-                                          (swap! (if implicit?
-                                                   simulator-add-implicit-invokes
-                                                   simulator-add-explicit-invokes)
-                                                 [{:method method
-                                                   :args params}])))
-                                      (do
+                                    (try
+                                      ;; try resolve method
+                                      (soot-resolve method)
+                                      (let [{:keys [returns
+                                                    explicit-invokes
+                                                    implicit-invokes
+                                                    component-invokes
+                                                    invoke-paths]}
+                                            (simulate-method {:method method
+                                                              :this this
+                                                              :params params
+                                                              :interesting-method?
+                                                              interesting-method?}
+                                                             (update-in options
+                                                                        [:soot-method-simulation-depth-budget]
+                                                                        dec))]
+                                        (do
+                                          (doto simulator
+                                            ;; implicit is contagious
+                                            (swap! (if implicit?
+                                                     simulator-add-implicit-invokes
+                                                     simulator-add-explicit-invokes)
+                                                   explicit-invokes)
+                                            (swap! simulator-add-implicit-invokes
+                                                   implicit-invokes)
+                                            (swap! simulator-add-component-invokes
+                                                   component-invokes)
+                                            (swap! simulator-add-invoke-paths
+                                                   #{invoke-paths}))
+                                          ;; if the result is unique, extract it
+                                          (if (== 1 (count returns))
+                                            (first returns)
+                                            returns)))                                      
+                                      
+                                      (catch Exception e)
+                                      (finally
                                         (when (or soot-dump-all-invokes
-                                                  (interesting-method? method))
+                                                  (try
+                                                    (interesting-method? method)
+                                                    (catch Exception e)))
                                           (doto simulator
                                             (swap! (if implicit?
                                                      simulator-add-implicit-invokes
                                                      simulator-add-explicit-invokes)
                                                    [{:method method
-                                                     :args params}])))
-                                        (let [{:keys [returns
-                                                      explicit-invokes
-                                                      implicit-invokes
-                                                      component-invokes]}
-                                              (simulate-method {:method method
-                                                                :this this
-                                                                :params params
-                                                                :interesting-method?
-                                                                interesting-method?}
-                                                               (update-in options
-                                                                          [:soot-method-simulation-depth-budget]
-                                                                          dec))]
-                                          (do
-                                            (doto simulator
-                                              ;; implicit is contagious
-                                              (swap! (if implicit?
-                                                       simulator-add-implicit-invokes
-                                                       simulator-add-explicit-invokes)
-                                                     explicit-invokes)
-                                              (swap! simulator-add-implicit-invokes
-                                                     implicit-invokes)
-                                              (swap! simulator-add-component-invokes
-                                                     component-invokes))
-                                            ;; if the result is unique, extract it
-                                            (if (== 1 (count returns))
-                                              (first returns)
-                                              returns))))))]
+                                                     :args params}]))))))]
                 (cond
                   
                   ;; safe invokes
@@ -758,7 +784,7 @@
                       default-return))
 
                   ;; setContentView
-                  (= method-name "setContentView")
+                  (#{"setContentView"} method-name)
                   (let [layout-id (first args)]
                     (cond
                       (number? layout-id)
@@ -949,6 +975,14 @@
                                   (swap! simulator-add-implicit-invokes
                                          [{:method base-value
                                            :args (second args)}]))
+                                (try
+                                  (doto simulator
+                                    (swap! simulator-add-invoke-paths
+                                           #{(format "%1$s.%2$s[%3$d args]"
+                                                     (get-soot-class-name base-value)
+                                                     (get-soot-name base-value)
+                                                     (count (second args)))}))
+                                  (catch Exception e))
                                 (swap! result conj
                                        (make-invoke-sexp :reflect base-value
                                                          (first args) (vec (second args))))))
@@ -1062,7 +1096,13 @@
                   (invoke-method method base-value args)))
               
               (catch Exception e
-                default-return))))]
+                default-return)
+              (finally
+                (try
+                  (doto simulator
+                    (swap! simulator-add-invoke-paths
+                           #{(.. method getSignature)}))
+                  (catch Exception e))))))]
     (try
       (.. expr
           (apply
@@ -1411,6 +1451,19 @@
 (defn- simulator-clear-component-invokes
   [simulator]
   (assoc-in simulator [:component-invokes] #{}))
+
+(defn- simulator-add-invoke-paths
+  [simulator invokes]
+  (update-in simulator [:invoke-paths] into
+             invokes))
+
+(defn- simulator-get-invoke-paths
+  [simulator]
+  (get-in simulator [:invoke-paths]))
+
+(defn- simulator-clear-invoke-paths
+  [simulator]
+  (assoc-in simulator [:invoke-paths] #{}))
 
 ;;
 ;; implicit control flow helpers

@@ -236,7 +236,8 @@
 
                                              (let [{:keys [explicit-invokes
                                                            implicit-invokes
-                                                           component-invokes]}
+                                                           component-invokes
+                                                           invoke-paths]}
                                                    (with-simulator
                                                      (initialize-classes {:classes application-classes
                                                                           :circumscription application-methods}
@@ -298,7 +299,14 @@
                                                                       :class (-> super get-soot-class-name)
                                                                       :package (.. super getPackageName)}]
                                                                (swap! result update-in (conj path k)
-                                                                      #(conj (set %1) %2) v))))))))))))
+                                                                      #(conj (set %1) %2) v)))))))))
+                                               (let [path [(.. callback-class getPackageName)
+                                                           (.. callback-class getName)
+                                                           :callbacks
+                                                           (.. callback getName)
+                                                           :invoke-paths]]
+                                                 (swap! result assoc-in path
+                                                        invoke-paths)))))
                                          (catch Exception e
                                            (print-stack-trace-if-verbose e verbose))
                                          (catch Error e

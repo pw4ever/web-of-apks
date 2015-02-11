@@ -95,7 +95,7 @@
    [nil "--soot-debug-show-each-statement" "debug facility: show each processed statement"]
    [nil "--soot-debug-show-locals-per-statement" "debug facility: show locals per each statement"]
    [nil "--soot-debug-show-all-per-statement" "debug facility: show all per each statement"]
-   [nil "--soot-debug-show-implict-cf" "debug facility: show all implicit control flows"]
+   [nil "--soot-debug-show-implicit-cf" "debug facility: show all implicit control flows"]
    [nil "--soot-debug-show-safe-invokes" "debug facility: show all safe invokes"]   
    
    ["-d" "--dump-model FILE" "dump binary APK model; append dump file paths to FILE"]
@@ -123,6 +123,7 @@
    ["-t" "--neo4j-task-tag" "tag Neo4j Apk nodes with labels"]
    ["-T" "--neo4j-task-untag" "untag Neo4j Apk nodes with labels"]
    [nil "--neo4j-include-methodinstance" "include MethodInstance in the WoA model"]
+   [nil "--neo4j-include-callgraph" "include call graph (CG) in the WoA model"]   
    ["-D" "--neo4j-dump-model-batch-csv PREFIX" "dump Neo4j batch import CSV files to PREFIX; ref: https://github.com/jexp/batch-import/tree/2.1"]
    
    ;; misc tasks

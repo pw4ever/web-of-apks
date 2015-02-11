@@ -3831,7 +3831,8 @@ spec\s+resource\s+
                                                (println &quot;app component callback:&quot; callback))
                                              (let [{:keys [explicit-invokes
                                                            implicit-invokes
-                                                           component-invokes]}
+                                                           component-invokes
+                                                           invoke-paths]}
                                                    (with-simulator
                                                      (initialize-classes {:classes application-classes
                                                                           :circumscription application-methods}
@@ -3893,7 +3894,14 @@ spec\s+resource\s+
                                                                       :class (-&gt; super get-soot-class-name)
                                                                       :package (.. super getPackageName)}]
                                                                (swap! result update-in (conj path k)
-                                                                      #(conj (set %1) %2) v))))))))))))
+                                                                      #(conj (set %1) %2) v)))))))))
+                                               (let [path [(.. callback-class getPackageName)
+                                                           (.. callback-class getName)
+                                                           :callbacks
+                                                           (.. callback getName)
+                                                           :invoke-paths]]
+                                                 (swap! result assoc-in path
+                                                        invoke-paths)))))
                                          (catch Exception e
                                            (print-stack-trace-if-verbose e verbose))
                                          (catch Error e
@@ -4164,7 +4172,8 @@ spec\s+resource\s+
          simulator-add-returns simulator-get-returns simulator-clear-returns
          simulator-add-explicit-invokes simulator-get-explicit-invokes simulator-clear-explicit-invokes
          simulator-add-implicit-invokes simulator-get-implicit-invokes simulator-clear-implicit-invokes
-         simulator-add-component-invokes simulator-get-component-invokes simulator-clear-component-invokes)
+         simulator-add-component-invokes simulator-get-component-invokes simulator-clear-component-invokes
+         simulator-add-invoke-paths simulator-get-invoke-paths simulator-clear-invoke-paths)
 (declare filter-implicit-cf-invoke-methods
          implicit-cf-class? implicit-cf? implicit-cf-task? implicit-cf-component? 
          get-transitive-implicit-cf-super-class-and-interface get-implicit-cf-root-class-names)
@@ -4326,6 +4335,7 @@ spec\s+resource\s+
   (let [all-explicit-invokes (atom #{})
         all-implicit-invokes (atom #{})
         all-component-invokes (atom #{})
+        all-invoke-paths (atom nil)
         ;; soot.SootMethod cannot be reliably compared for value (as in a set)
         circumscription (if (= circumscription :all)
                           circumscription
@@ -4339,7 +4349,8 @@ spec\s+resource\s+
       (let [{:keys [returns
                     explicit-invokes
                     implicit-invokes
-                    component-invokes]}
+                    component-invokes
+                    invoke-paths]}
             ;; full simulation
             (simulate-method {:method
                               root-method
@@ -4364,13 +4375,15 @@ spec\s+resource\s+
         (swap! all-implicit-invokes into
                implicit-invokes)
         (swap! all-component-invokes into
-               component-invokes))
+               component-invokes)
+        (reset! all-invoke-paths invoke-paths))
       (catch Exception e
         (print-stack-trace-if-verbose e verbose 3)))
     ;; return result
     {:explicit-invokes @all-explicit-invokes
      :implicit-invokes @all-implicit-invokes
-     :component-invokes @all-component-invokes}))</pre></td></tr><tr><td class="docs"><p>simulate method</p>
+     :component-invokes @all-component-invokes
+     :invoke-paths @all-invoke-paths}))</pre></td></tr><tr><td class="docs"><p>simulate method</p>
 </td><td class="codes"><pre class="brush: clojure">(defn- simulate-method
   [{:keys [method this params interesting-method?]
     :or {interesting-method? (constantly true)}
@@ -4382,6 +4395,9 @@ spec\s+resource\s+
     :as options}]
   (let [method (try (soot-resolve method)
                     (catch Exception e method))
+        method-name (try
+                      (.. method getSignature)
+                      (catch Exception e))
         default-return #{(make-invoke-sexp :invoke method this params)}]
     (cond
       ;;  safe invokes
@@ -4408,12 +4424,14 @@ spec\s+resource\s+
                       default-return)))
        :explicit-invokes #{}
        :implicit-invokes #{}
-       :component-invokes #{}}      
+       :component-invokes #{}
+       :invoke-paths method-name}      
       (not (instance? soot.SootMethod method))
       {:returns default-return
        :explicit-invokes #{}
        :implicit-invokes #{}
-       :component-invokes #{}}      
+       :component-invokes #{}
+       :invoke-paths method-name}      
       ;; only simulate method within circumscription
       (and (not= circumscription :all)
            (not (contains? circumscription
@@ -4422,7 +4440,8 @@ spec\s+resource\s+
         {:returns default-return
          :explicit-invokes #{}
          :implicit-invokes #{}
-         :component-invokes #{}})
+         :component-invokes #{}
+         :invoke-paths method-name})
       (&lt; soot-method-simulation-depth-budget 0)
       (do
         {:returns #{(make-error-sexp :no-budget
@@ -4431,7 +4450,8 @@ spec\s+resource\s+
                                       :params params})}
          :explicit-invokes #{}
          :implicit-invokes #{}
-         :component-invokes #{}})
+         :component-invokes #{}
+         :invoke-paths method-name})
       ;; no method body, cannot proceed
       (try
         (.. method retrieveActiveBody)
@@ -4445,12 +4465,15 @@ spec\s+resource\s+
                                       :params params})}
          :explicit-invokes #{}
          :implicit-invokes #{}
-         :component-invokes #{}})
+         :component-invokes #{}
+         :invoke-paths method-name})
       :otherwise
       (let [all-returns (atom #{})
             all-explicit-invokes (atom #{})
             all-implicit-invokes (atom #{})
             all-component-invokes (atom #{})
+            all-invoke-paths (atom (when method-name
+                                     {method-name #{}}))
             body (.. method getActiveBody)
             stmt-info
             (let [stmts (-&gt;&gt; (.. body getUnits snapshotIterator) iterator-seq vec)
@@ -4492,6 +4515,11 @@ spec\s+resource\s+
                               (swap! all-component-invokes into
                                      (-&gt; simulator
                                          simulator-get-component-invokes))
+                              (when method-name
+                                (swap! all-invoke-paths update-in [method-name]
+                                       into
+                                       (-&gt; simulator
+                                           simulator-get-invoke-paths)))
                               ;; add the following to worklist
                               (for [start-stmt (set next-start-stmts)]
                                 ;; control flow sensitive!
@@ -4499,12 +4527,16 @@ spec\s+resource\s+
                                                 simulator-clear-returns
                                                 simulator-clear-explicit-invokes
                                                 simulator-clear-implicit-invokes
-                                                simulator-clear-component-invokes)
+                                                simulator-clear-component-invokes
+                                                simulator-clear-invoke-paths)
                                  :start-stmt start-stmt}))))))))
         {:returns @all-returns
          :explicit-invokes @all-explicit-invokes
          :implicit-invokes @all-implicit-invokes
-         :component-invokes @all-component-invokes}))))</pre></td></tr><tr><td class="docs"><p>simulate a basic block</p>
+         :component-invokes @all-component-invokes
+         :invoke-paths (if (empty? (get-in @all-invoke-paths [method-name]))
+                         method-name
+                         @all-invoke-paths)}))))</pre></td></tr><tr><td class="docs"><p>simulate a basic block</p>
 </td><td class="codes"><pre class="brush: clojure">(defn- simulate-basic-block
   [{:keys [simulator stmt-info start-stmt method interesting-method?]
     :as simulation-params}
@@ -4660,7 +4692,7 @@ spec\s+resource\s+
   [;; for a method frame
    this params locals returns
    ;; during simulation
-   explicit-invokes implicit-invokes component-invokes])</pre></td></tr><tr><td class="docs">
+   explicit-invokes implicit-invokes component-invokes invoke-paths])</pre></td></tr><tr><td class="docs">
 </td><td class="codes"><pre class="brush: clojure">(defn- create-simulator
   [this params]
   (map-&gt;Simulator {:this this
@@ -4669,7 +4701,8 @@ spec\s+resource\s+
                    :returns #{}
                    :explicit-invokes #{}
                    :implicit-invokes #{}
-                   :component-invokes #{}}))</pre></td></tr><tr><td class="docs">
+                   :component-invokes #{}
+                   :invoke-paths #{}}))</pre></td></tr><tr><td class="docs">
 </td><td class="codes"><pre class="brush: clojure">(defn- simulator-new-instance
   [&amp; [class]]
   (let [instance (gensym (str &quot;instance&quot;
@@ -4736,51 +4769,51 @@ spec\s+resource\s+
                          [{:method method
                            :args args}])))
               (let [invoke-method (fn [method this params &amp; [implicit?]]
-                                    (if (instance? woa.apk.dex.soot.sexp.MethodSexp
-                                                   method)
-                                      (do
-                                        (doto simulator
-                                          (swap! (if implicit?
-                                                   simulator-add-implicit-invokes
-                                                   simulator-add-explicit-invokes)
-                                                 [{:method method
-                                                   :args params}])))
-                                      (do
+                                    (try
+                                      ;; try resolve method
+                                      (soot-resolve method)
+                                      (let [{:keys [returns
+                                                    explicit-invokes
+                                                    implicit-invokes
+                                                    component-invokes
+                                                    invoke-paths]}
+                                            (simulate-method {:method method
+                                                              :this this
+                                                              :params params
+                                                              :interesting-method?
+                                                              interesting-method?}
+                                                             (update-in options
+                                                                        [:soot-method-simulation-depth-budget]
+                                                                        dec))]
+                                        (do
+                                          (doto simulator
+                                            ;; implicit is contagious
+                                            (swap! (if implicit?
+                                                     simulator-add-implicit-invokes
+                                                     simulator-add-explicit-invokes)
+                                                   explicit-invokes)
+                                            (swap! simulator-add-implicit-invokes
+                                                   implicit-invokes)
+                                            (swap! simulator-add-component-invokes
+                                                   component-invokes)
+                                            (swap! simulator-add-invoke-paths
+                                                   #{invoke-paths}))
+                                          ;; if the result is unique, extract it
+                                          (if (== 1 (count returns))
+                                            (first returns)
+                                            returns)))                                      
+                                      (catch Exception e)
+                                      (finally
                                         (when (or soot-dump-all-invokes
-                                                  (interesting-method? method))
+                                                  (try
+                                                    (interesting-method? method)
+                                                    (catch Exception e)))
                                           (doto simulator
                                             (swap! (if implicit?
                                                      simulator-add-implicit-invokes
                                                      simulator-add-explicit-invokes)
                                                    [{:method method
-                                                     :args params}])))
-                                        (let [{:keys [returns
-                                                      explicit-invokes
-                                                      implicit-invokes
-                                                      component-invokes]}
-                                              (simulate-method {:method method
-                                                                :this this
-                                                                :params params
-                                                                :interesting-method?
-                                                                interesting-method?}
-                                                               (update-in options
-                                                                          [:soot-method-simulation-depth-budget]
-                                                                          dec))]
-                                          (do
-                                            (doto simulator
-                                              ;; implicit is contagious
-                                              (swap! (if implicit?
-                                                       simulator-add-implicit-invokes
-                                                       simulator-add-explicit-invokes)
-                                                     explicit-invokes)
-                                              (swap! simulator-add-implicit-invokes
-                                                     implicit-invokes)
-                                              (swap! simulator-add-component-invokes
-                                                     component-invokes))
-                                            ;; if the result is unique, extract it
-                                            (if (== 1 (count returns))
-                                              (first returns)
-                                              returns))))))]
+                                                     :args params}]))))))]
                 (cond
                   ;; safe invokes
                   (let [t (get safe-invokes class-name)]
@@ -4809,7 +4842,7 @@ spec\s+resource\s+
                     (catch Exception e
                       default-return))
                   ;; setContentView
-                  (= method-name &quot;setContentView&quot;)
+                  (#{&quot;setContentView&quot;} method-name)
                   (let [layout-id (first args)]
                     (cond
                       (number? layout-id)
@@ -4989,6 +5022,14 @@ spec\s+resource\s+
                                   (swap! simulator-add-implicit-invokes
                                          [{:method base-value
                                            :args (second args)}]))
+                                (try
+                                  (doto simulator
+                                    (swap! simulator-add-invoke-paths
+                                           #{(format &quot;%1$s.%2$s[%3$d args]&quot;
+                                                     (get-soot-class-name base-value)
+                                                     (get-soot-name base-value)
+                                                     (count (second args)))}))
+                                  (catch Exception e))
                                 (swap! result conj
                                        (make-invoke-sexp :reflect base-value
                                                          (first args) (vec (second args))))))
@@ -5086,7 +5127,13 @@ spec\s+resource\s+
                   :default
                   (invoke-method method base-value args)))
               (catch Exception e
-                default-return))))]
+                default-return)
+              (finally
+                (try
+                  (doto simulator
+                    (swap! simulator-add-invoke-paths
+                           #{(.. method getSignature)}))
+                  (catch Exception e))))))]
     (try
       (.. expr
           (apply
@@ -5406,7 +5453,17 @@ spec\s+resource\s+
   (get-in simulator [:component-invokes]))</pre></td></tr><tr><td class="docs">
 </td><td class="codes"><pre class="brush: clojure">(defn- simulator-clear-component-invokes
   [simulator]
-  (assoc-in simulator [:component-invokes] #{}))</pre></td></tr><tr><td class="docs"><p>implicit control flow helpers</p>
+  (assoc-in simulator [:component-invokes] #{}))</pre></td></tr><tr><td class="docs">
+</td><td class="codes"><pre class="brush: clojure">(defn- simulator-add-invoke-paths
+  [simulator invokes]
+  (update-in simulator [:invoke-paths] into
+             invokes))</pre></td></tr><tr><td class="docs">
+</td><td class="codes"><pre class="brush: clojure">(defn- simulator-get-invoke-paths
+  [simulator]
+  (get-in simulator [:invoke-paths]))</pre></td></tr><tr><td class="docs">
+</td><td class="codes"><pre class="brush: clojure">(defn- simulator-clear-invoke-paths
+  [simulator]
+  (assoc-in simulator [:invoke-paths] #{}))</pre></td></tr><tr><td class="docs"><p>implicit control flow helpers</p>
 </td><td class="codes"></td></tr><tr><td class="docs"><p>filter methods that contain implicit control flow invokes</p>
 </td><td class="codes"><pre class="brush: clojure">(defn filter-implicit-cf-invoke-methods
   [methods]
@@ -6152,7 +6209,7 @@ spec\s+resource\s+
    [nil &quot;--soot-debug-show-each-statement&quot; &quot;debug facility: show each processed statement&quot;]
    [nil &quot;--soot-debug-show-locals-per-statement&quot; &quot;debug facility: show locals per each statement&quot;]
    [nil &quot;--soot-debug-show-all-per-statement&quot; &quot;debug facility: show all per each statement&quot;]
-   [nil &quot;--soot-debug-show-implict-cf&quot; &quot;debug facility: show all implicit control flows&quot;]
+   [nil &quot;--soot-debug-show-implicit-cf&quot; &quot;debug facility: show all implicit control flows&quot;]
    [nil &quot;--soot-debug-show-safe-invokes&quot; &quot;debug facility: show all safe invokes&quot;]   
    [&quot;-d&quot; &quot;--dump-model FILE&quot; &quot;dump binary APK model; append dump file paths to FILE&quot;]
    [&quot;-l&quot; &quot;--load-model FILE&quot; &quot;load binary APK model; load from dump file paths in FILE&quot;]
@@ -6177,6 +6234,7 @@ spec\s+resource\s+
    [&quot;-t&quot; &quot;--neo4j-task-tag&quot; &quot;tag Neo4j Apk nodes with labels&quot;]
    [&quot;-T&quot; &quot;--neo4j-task-untag&quot; &quot;untag Neo4j Apk nodes with labels&quot;]
    [nil &quot;--neo4j-include-methodinstance&quot; &quot;include MethodInstance in the WoA model&quot;]
+   [nil &quot;--neo4j-include-callgraph&quot; &quot;include call graph (CG) in the WoA model&quot;]   
    [&quot;-D&quot; &quot;--neo4j-dump-model-batch-csv PREFIX&quot; &quot;dump Neo4j batch import CSV files to PREFIX; ref: https://github.com/jexp/batch-import/tree/2.1&quot;]
    ;; misc tasks
    [nil &quot;--dump-manifest&quot; &quot;dump AndroidManifest.xml&quot;]
@@ -6513,7 +6571,8 @@ spec\s+resource\s+
                              rel))))]
   (defn add-to-batch-csv
   [apk
-   {:keys [neo4j-include-methodinstance]
+   {:keys [neo4j-include-methodinstance
+           neo4j-include-callgraph]
     :as options}]
   (let [manifest (:manifest apk)
         dex-sha256 (:dex-sha256 apk)
@@ -6670,7 +6729,66 @@ spec\s+resource\s+
                                          invoke-name (:method callback-invoke)
                                          invoke [[&quot;Method&quot;]
                                                  {&quot;name&quot; (str invoke-class-name &quot;.&quot; invoke-name)}]]
-                                     (merge-rel invoke [[&quot;DESCEND&quot;] nil] api)))))))))))))))))))
+                                     (merge-rel invoke [[&quot;DESCEND&quot;] nil] api))))))))
+                         (when neo4j-include-callgraph
+                           (let [path (conj path :invoke-paths)
+                                 invoke-paths (get-in the-dex path)
+                                 get-node (fn [invoke-paths]
+                                            (cond
+                                              (map? invoke-paths) (-&gt;&gt; invoke-paths keys first)
+                                              :otherwise invoke-paths))
+                                 get-descendants (fn [invoke-paths]
+                                                   (cond
+                                                     (map? invoke-paths) (-&gt;&gt; invoke-paths vals first)
+                                                     :otherwise nil))
+                                 get-node-name (fn [node]
+                                                 (cond
+                                                   ;; Soot signature format
+                                                   (re-matches #&quot;&lt;[^&gt;]+&gt;&quot; node)
+                                                   (let [[_ class method]
+                                                         (re-find #&quot;^&lt;([^:]+):\s+\S+\s+([^(]+)\(&quot;
+                                                                  node)]
+                                                     (str class &quot;.&quot; method))
+                                                   (re-matches #&quot;[^&lt;]+\[.+\]&quot; node)
+                                                   (let [[_ classmethod]
+                                                         (re-find #&quot;^(.+)\[&quot; node)]
+                                                     classmethod)
+                                                   :otherwise
+                                                   node))]
+                             (when invoke-paths
+                               ;; link the root node to the Callback and the Dex
+                               (let [first-node (get-node invoke-paths)
+                                     node [[&quot;CallGraphNode&quot;]
+                                           {&quot;name&quot; (get-node-name first-node)
+                                            &quot;signature&quot; first-node
+                                            &quot;dex&quot; dex-sha256}]]
+                                 (merge-node node)
+                                 (merge-rel dex [[&quot;CALLGRAPH&quot;] nil] node)
+                                 (merge-rel callback [[&quot;CALLGRAPH&quot;] nil] node))
+                               ;; iteratively link descendants
+                               (loop [worklist #{invoke-paths}]
+                                 (when-not (empty? worklist)
+                                   (let [new-worklist (atom #{})]
+                                     (dorun
+                                      (for [work worklist]
+                                        (let [node (get-node work)
+                                              descendants (get-descendants work)
+                                              children (map get-node descendants)
+                                              parent-node [[&quot;CallGraphNode&quot;]
+                                                           {&quot;name&quot; (get-node-name node)
+                                                            &quot;signature&quot; node
+                                                            &quot;dex&quot; dex-sha256}]]
+                                          (merge-node parent-node)
+                                          (dorun
+                                           (for [child children]
+                                             (let [child-node [[&quot;CallGraphNode&quot;]
+                                                               {&quot;name&quot; (get-node-name child)
+                                                                &quot;signature&quot; child
+                                                                &quot;dex&quot; dex-sha256}]]
+                                               (merge-node child-node)
+                                               (merge-rel parent-node [[&quot;INVOKE&quot;] nil] child-node))))
+                                          (swap! new-worklist into descendants))))
+                                     (recur @new-worklist)))))))                         )))))))))))
       ;; app components
       (doseq [comp-type [:activity :service :receiver]]
         (doseq [[comp-name {:keys [intent-filter-action
@@ -6735,7 +6853,8 @@ spec\s+resource\s+
                                (if rel-props &quot;\t&quot; &quot;&quot;)
                                (str/join &quot;,&quot; labels)))))))))))</pre></td></tr><tr><td class="docs"><p>populate the database with the parsed apk structure</p>
 </td><td class="codes"><pre class="brush: clojure">(defn populate-from-parsed-apk
-  [apk {:keys [neo4j-include-methodinstance]
+  [apk {:keys [neo4j-include-methodinstance
+               neo4j-include-callgraph]
         :as options}]
   (let [manifest (:manifest apk)
         dex-sha256 (:dex-sha256 apk)
@@ -6830,134 +6949,208 @@ spec\s+resource\s+
       (ntx/execute
        conn transaction
        (let [result (atom [])]
-         (doseq [package-name (-&gt;&gt; dex keys)]
-           (let [class-names (-&gt;&gt; (get-in dex [package-name]) keys)]
-             (doseq [class-name class-names]
-               (let [{:keys [android-api-ancestors callbacks]} (-&gt;&gt; (get-in dex [package-name class-name]))]
-                 (doseq [callback-name (-&gt;&gt; callbacks keys)]
-                   (let [path [package-name class-name :callbacks callback-name]]
-                     (swap! result conj
-                            (ntx/statement
-                             (str/join &quot; &quot;
-                                       [&quot;MERGE (class:Class {name:{classname}})&quot;
-                                        &quot;MERGE (callback:Method:Callback {name:{callbackname}})&quot;
-                                        &quot;MERGE (class)-[:CONTAIN]-&gt;(callback)&quot;])
-                             {:classname class-name
-                              :callbackname (str class-name &quot;.&quot; callback-name)}))
-                     ;; explicit control flow
-                     (let [path (conj path :explicit)]
-                       ;; deduplication
-                       (let [callback-invokes (-&gt;&gt; (get-in dex path)
-                                                   (map #(select-keys % [:package :class :method]))
-                                                   (into #{}))]
-                         (doseq [callback-invoke callback-invokes]
-                           (let [invoke-package-name (:package callback-invoke)
-                                 invoke-class-name (:class callback-invoke)
-                                 invoke-name (:method callback-invoke)]
-                             (swap! result conj
-                                    (ntx/statement
-                                     (str/join &quot; &quot;
-                                               [&quot;MERGE (apk:Apk {sha256:{apksha256}})&quot;
-                                                &quot;MERGE (callback:Callback {name:{callbackname}})&quot;
-                                                &quot;MERGE (invokepackage:Package {name:{invokepackagename}})&quot;
-                                                &quot;MERGE (invokeclass:Class {name:{invokeclassname}})&quot;
-                                                &quot;MERGE (invoke:Method {name:{invokename}})&quot;
-                                                &quot;MERGE (invokepackage)-[:CONTAIN]-&gt;(invokeclass)-[:CONTAIN]-&gt;(invoke)&quot;
-                                                &quot;MERGE (callback)-[:EXPLICIT_INVOKE]-&gt;(invoke)&quot;
-                                                ;; to quickly find Apk from Method
-                                                &quot;MERGE (apk)&lt;-[:INVOKED_BY]-(invoke)&quot;])
-                                     {:apksha256 apk-sha256
-                                      :callbackname (str class-name &quot;.&quot; callback-name)
-                                      :invokepackagename invoke-package-name
-                                      :invokeclassname invoke-class-name
-                                      :invokename (str invoke-class-name &quot;.&quot; invoke-name)})))))
-                       (when neo4j-include-methodinstance
-                         (doseq [callback-invoke (get-in dex path)]
-                           (let [invoke-class-name (:class callback-invoke)
-                                 invoke-name (:method callback-invoke)
-                                 args (:args callback-invoke)]
-                             (swap! result conj
-                                    (ntx/statement
-                                     (str/join &quot; &quot;
-                                               [&quot;MERGE (callback:Callback {name:{callbackname}})&quot;
-                                                &quot;MERGE (invoke:Method {name:{invokename}})&quot;
-                                                &quot;MERGE (invokeinst:MethodInstance {name:{invokename},args:{args}})&quot;
-                                                &quot;MERGE (invoke)&lt;-[:INSTANCE_OF]-(invokeinst)&quot;
-                                                &quot;MERGE (callback)-[:EXPLICIT_INVOKE]-&gt;(invokeinst)&quot;])
-                                     {:callbackname (str class-name &quot;.&quot; callback-name)
-                                      :invokename (str invoke-class-name &quot;.&quot; invoke-name)
-                                      :args args}))))))
-                     ;; implicit control flow
-                     (let [path (conj path :implicit)]
-                       ;; deduplication
-                       (let [callback-invokes (-&gt;&gt; (get-in dex path)
-                                                   (map #(select-keys % [:package :class :method]))
-                                                   (into #{}))]
-                         (doseq [callback-invoke callback-invokes]
-                           (let [invoke-package-name (:package callback-invoke)
-                                 invoke-class-name (:class callback-invoke)
-                                 invoke-name (:method callback-invoke)]
-                             (swap! result conj
-                                    (ntx/statement
-                                     (str/join &quot; &quot;
-                                               [&quot;MERGE (apk:Apk {sha256:{apksha256}})&quot;
-                                                &quot;MERGE (callback:Callback {name:{callbackname}})&quot;
-                                                &quot;MERGE (invokepackage:Package {name:{invokepackagename}})&quot;
-                                                &quot;MERGE (invokeclass:Class {name:{invokeclassname}})&quot;
-                                                &quot;MERGE (invoke:Method {name:{invokename}})&quot;
-                                                &quot;MERGE (invokepackage)-[:CONTAIN]-&gt;(invokeclass)-[:CONTAIN]-&gt;(invoke)&quot;
-                                                &quot;MERGE (callback)-[:IMPLICIT_INVOKE]-&gt;(invoke)&quot;
-                                                ;; to quickly find Apk from Method
-                                                &quot;MERGE (apk)&lt;-[:INVOKED_BY]-(invoke)&quot;])
-                                     {:apksha256 apk-sha256
-                                      :callbackname (str class-name &quot;.&quot; callback-name)
-                                      :invokepackagename invoke-package-name
-                                      :invokeclassname invoke-class-name
-                                      :invokename (str invoke-class-name &quot;.&quot; invoke-name)})))))
-                       (when neo4j-include-methodinstance
-                         (doseq [callback-invoke (get-in dex path)]
-                           (let [invoke-class-name (:class callback-invoke)
-                                 invoke-name (:method callback-invoke)
-                                 args (:args callback-invoke)]
-                             (swap! result conj
-                                    (ntx/statement
-                                     (str/join &quot; &quot;
-                                               [&quot;MERGE (callback:Callback {name:{callbackname}})&quot;
-                                                &quot;MERGE (invoke:Method {name:{invokename}})&quot;
-                                                &quot;MERGE (invokeinst:MethodInstance {name:{invokename},args:{args}})&quot;
-                                                &quot;MERGE (invoke)&lt;-[:INSTANCE_OF]-(invokeinst)&quot;
-                                                &quot;MERGE (callback)-[:IMPLICIT_INVOKE]-&gt;(invokeinst)&quot;])
-                                     {:callbackname (str class-name &quot;.&quot; callback-name)
-                                      :invokename (str invoke-class-name &quot;.&quot; invoke-name)
-                                      :args args}))))))
-                     ;; invokes that descend from Android API
-                     (let [path (conj path :descend)]
-                       (doseq [[api-invoke callback-invokes] (get-in dex path)]
-                         (let [api-package-name (:package api-invoke)
-                               api-class-name (:class api-invoke)
-                               api-name (:method api-invoke)]
-                           (swap! result conj
-                                  (ntx/statement
-                                   (str/join &quot; &quot;
-                                             [&quot;MERGE (apipackage:Package {name:{apipackagename}})&quot;
-                                              &quot;MERGE (apiclass:Class {name:{apiclassname}})&quot;
-                                              &quot;MERGE (apiname:Method {name:{apiname}})&quot;
-                                              &quot;MERGE (apipackage)-[:CONTAIN]-&gt;(apiclass)-[:CONTAIN]-&gt;(apiname)&quot;])
-                                   {:apipackagename api-package-name
-                                    :apiclassname api-class-name
-                                    :apiname (str api-class-name &quot;.&quot; api-name)}))
-                           (doseq [callback-invoke callback-invokes]
-                             (let [invoke-package-name (:package callback-invoke)
-                                   invoke-class-name (:class callback-invoke)
-                                   invoke-name (:method callback-invoke)]
+         ;; http://stackoverflow.com/a/26366775
+         (dorun
+          (for [package-name (-&gt;&gt; dex keys)]
+            (let [class-names (-&gt;&gt; (get-in dex [package-name]) keys)]
+              (dorun
+               (for [class-name class-names]
+                 (let [{:keys [android-api-ancestors callbacks]} (-&gt;&gt; (get-in dex [package-name class-name]))]
+                   (dorun
+                    (for [callback-name (-&gt;&gt; callbacks keys)]
+                      (let [path [package-name class-name :callbacks callback-name]]
+                        (swap! result conj
+                               (ntx/statement
+                                (str/join &quot; &quot;
+                                          [&quot;MERGE (class:Class {name:{classname}})&quot;
+                                           &quot;MERGE (callback:Method:Callback {name:{callbackname}})&quot;
+                                           &quot;MERGE (class)-[:CONTAIN]-&gt;(callback)&quot;])
+                                {:classname class-name
+                                 :callbackname (str class-name &quot;.&quot; callback-name)}))
+                        ;; explicit control flow
+                        (let [path (conj path :explicit)]
+                          ;; deduplication
+                          (let [callback-invokes (-&gt;&gt; (get-in dex path)
+                                                      (map #(select-keys % [:package :class :method]))
+                                                      (into #{}))]
+                            (dorun
+                             (for [callback-invoke callback-invokes]
+                               (let [invoke-package-name (:package callback-invoke)
+                                     invoke-class-name (:class callback-invoke)
+                                     invoke-name (:method callback-invoke)]
+                                 (swap! result conj
+                                        (ntx/statement
+                                         (str/join &quot; &quot;
+                                                   [&quot;MERGE (apk:Apk {sha256:{apksha256}})&quot;
+                                                    &quot;MERGE (callback:Callback {name:{callbackname}})&quot;
+                                                    &quot;MERGE (invokepackage:Package {name:{invokepackagename}})&quot;
+                                                    &quot;MERGE (invokeclass:Class {name:{invokeclassname}})&quot;
+                                                    &quot;MERGE (invoke:Method {name:{invokename}})&quot;
+                                                    &quot;MERGE (invokepackage)-[:CONTAIN]-&gt;(invokeclass)-[:CONTAIN]-&gt;(invoke)&quot;
+                                                    &quot;MERGE (callback)-[:EXPLICIT_INVOKE]-&gt;(invoke)&quot;
+                                                    ;; to quickly find Apk from Method
+                                                    &quot;MERGE (apk)&lt;-[:INVOKED_BY]-(invoke)&quot;])
+                                         {:apksha256 apk-sha256
+                                          :callbackname (str class-name &quot;.&quot; callback-name)
+                                          :invokepackagename invoke-package-name
+                                          :invokeclassname invoke-class-name
+                                          :invokename (str invoke-class-name &quot;.&quot; invoke-name)}))))))
+                          (when neo4j-include-methodinstance
+                            (dorun
+                             (for [callback-invoke (get-in dex path)]
+                               (let [invoke-class-name (:class callback-invoke)
+                                     invoke-name (:method callback-invoke)
+                                     args (:args callback-invoke)]
+                                 (swap! result conj
+                                        (ntx/statement
+                                         (str/join &quot; &quot;
+                                                   [&quot;MERGE (callback:Callback {name:{callbackname}})&quot;
+                                                    &quot;MERGE (invoke:Method {name:{invokename}})&quot;
+                                                    &quot;MERGE (invokeinst:MethodInstance {name:{invokename},args:{args}})&quot;
+                                                    &quot;MERGE (invoke)&lt;-[:INSTANCE_OF]-(invokeinst)&quot;
+                                                    &quot;MERGE (callback)-[:EXPLICIT_INVOKE]-&gt;(invokeinst)&quot;])
+                                         {:callbackname (str class-name &quot;.&quot; callback-name)
+                                          :invokename (str invoke-class-name &quot;.&quot; invoke-name)
+                                          :args args})))))))
+                        ;; implicit control flow
+                        (let [path (conj path :implicit)]
+                          ;; deduplication
+                          (let [callback-invokes (-&gt;&gt; (get-in dex path)
+                                                      (map #(select-keys % [:package :class :method]))
+                                                      (into #{}))]
+                            (dorun
+                             (for [callback-invoke callback-invokes]
+                               (let [invoke-package-name (:package callback-invoke)
+                                     invoke-class-name (:class callback-invoke)
+                                     invoke-name (:method callback-invoke)]
+                                 (swap! result conj
+                                        (ntx/statement
+                                         (str/join &quot; &quot;
+                                                   [&quot;MERGE (apk:Apk {sha256:{apksha256}})&quot;
+                                                    &quot;MERGE (callback:Callback {name:{callbackname}})&quot;
+                                                    &quot;MERGE (invokepackage:Package {name:{invokepackagename}})&quot;
+                                                    &quot;MERGE (invokeclass:Class {name:{invokeclassname}})&quot;
+                                                    &quot;MERGE (invoke:Method {name:{invokename}})&quot;
+                                                    &quot;MERGE (invokepackage)-[:CONTAIN]-&gt;(invokeclass)-[:CONTAIN]-&gt;(invoke)&quot;
+                                                    &quot;MERGE (callback)-[:IMPLICIT_INVOKE]-&gt;(invoke)&quot;
+                                                    ;; to quickly find Apk from Method
+                                                    &quot;MERGE (apk)&lt;-[:INVOKED_BY]-(invoke)&quot;])
+                                         {:apksha256 apk-sha256
+                                          :callbackname (str class-name &quot;.&quot; callback-name)
+                                          :invokepackagename invoke-package-name
+                                          :invokeclassname invoke-class-name
+                                          :invokename (str invoke-class-name &quot;.&quot; invoke-name)}))))))
+                          (when neo4j-include-methodinstance
+                            (dorun
+                             (for [callback-invoke (get-in dex path)]
+                               (let [invoke-class-name (:class callback-invoke)
+                                     invoke-name (:method callback-invoke)
+                                     args (:args callback-invoke)]
+                                 (swap! result conj
+                                        (ntx/statement
+                                         (str/join &quot; &quot;
+                                                   [&quot;MERGE (callback:Callback {name:{callbackname}})&quot;
+                                                    &quot;MERGE (invoke:Method {name:{invokename}})&quot;
+                                                    &quot;MERGE (invokeinst:MethodInstance {name:{invokename},args:{args}})&quot;
+                                                    &quot;MERGE (invoke)&lt;-[:INSTANCE_OF]-(invokeinst)&quot;
+                                                    &quot;MERGE (callback)-[:IMPLICIT_INVOKE]-&gt;(invokeinst)&quot;])
+                                         {:callbackname (str class-name &quot;.&quot; callback-name)
+                                          :invokename (str invoke-class-name &quot;.&quot; invoke-name)
+                                          :args args})))))))
+                        ;; invokes that descend from Android API
+                        (let [path (conj path :descend)]
+                          (dorun
+                           (for [[api-invoke callback-invokes] (get-in dex path)]
+                             (let [api-package-name (:package api-invoke)
+                                   api-class-name (:class api-invoke)
+                                   api-name (:method api-invoke)]
                                (swap! result conj
                                       (ntx/statement
                                        (str/join &quot; &quot;
-                                                 [&quot;MERGE (apiname:Method {name:{apiname}})&quot;
-                                                  &quot;MERGE (invokename:Method {name:{invokename}})&quot;
-                                                  &quot;MERGE (apiname)&lt;-[:DESCEND]-(invokename)&quot;])
-                                       (merge {:apiname (str api-class-name &quot;.&quot; api-name)
-                                               :invokename (str invoke-class-name &quot;.&quot; invoke-name)}))))))))))))))         
+                                                 [&quot;MERGE (apipackage:Package {name:{apipackagename}})&quot;
+                                                  &quot;MERGE (apiclass:Class {name:{apiclassname}})&quot;
+                                                  &quot;MERGE (apiname:Method {name:{apiname}})&quot;
+                                                  &quot;MERGE (apipackage)-[:CONTAIN]-&gt;(apiclass)-[:CONTAIN]-&gt;(apiname)&quot;])
+                                       {:apipackagename api-package-name
+                                        :apiclassname api-class-name
+                                        :apiname (str api-class-name &quot;.&quot; api-name)}))
+                               (dorun
+                                (for [callback-invoke callback-invokes]
+                                  (let [invoke-package-name (:package callback-invoke)
+                                        invoke-class-name (:class callback-invoke)
+                                        invoke-name (:method callback-invoke)]
+                                    (swap! result conj
+                                           (ntx/statement
+                                            (str/join &quot; &quot;
+                                                      [&quot;MERGE (apiname:Method {name:{apiname}})&quot;
+                                                       &quot;MERGE (invokename:Method {name:{invokename}})&quot;
+                                                       &quot;MERGE (apiname)&lt;-[:DESCEND]-(invokename)&quot;])
+                                            (merge {:apiname (str api-class-name &quot;.&quot; api-name)
+                                                    :invokename (str invoke-class-name &quot;.&quot; invoke-name)}))))))))))
+                        (when neo4j-include-callgraph
+                          (let [path (conj path :invoke-paths)
+                                invoke-paths (get-in dex path)
+                                get-node (fn [invoke-paths]
+                                           (cond
+                                             (map? invoke-paths) (-&gt;&gt; invoke-paths keys first)
+                                             :otherwise invoke-paths))
+                                get-descendants (fn [invoke-paths]
+                                                  (cond
+                                                    (map? invoke-paths) (-&gt;&gt; invoke-paths vals first)
+                                                    :otherwise nil))
+                                get-node-name (fn [node]
+                                                (cond
+                                                  ;; Soot signature format
+                                                  (re-matches #&quot;&lt;[^&gt;]+&gt;&quot; node)
+                                                  (let [[_ class method]
+                                                        (re-find #&quot;^&lt;([^:]+):\s+\S+\s+([^(]+)\(&quot;
+                                                                 node)]
+                                                    (str class &quot;.&quot; method))
+                                                  (re-matches #&quot;[^&lt;]+\[.+\]&quot; node)
+                                                  (let [[_ classmethod]
+                                                        (re-find #&quot;^(.+)\[&quot; node)]
+                                                    classmethod)
+                                                  :otherwise
+                                                  node))]
+                            (when-let [first-node (get-node invoke-paths)]
+                              ;; link the root node to the Callback and the Dex
+                              (swap! result conj
+                                     (ntx/statement
+                                      (str/join &quot; &quot;
+                                                [&quot;MERGE (dex:Dex {sha256:{dexsha256}})&quot;
+                                                 &quot;MERGE (callback:Callback {name:{callbackname}})&quot;
+                                                 &quot;MERGE (cgnode:CallGraphNode {name:{name},dex:{dexsha256},signature:{signature}})&quot;
+                                                 &quot;MERGE (dex)-[:CALLGRAPH]-&gt;(cgnode)&lt;-[:CALLGRAPH]-(callback)&quot;])
+                                      {:dexsha256 dex-sha256
+                                       :name (get-node-name first-node)
+                                       :signature first-node
+                                       :callbackname (str class-name &quot;.&quot; callback-name)})))
+                            (loop [worklist #{invoke-paths}]
+                              (when-not (empty? worklist)
+                                (let [new-worklist (atom #{})]
+                                  (dorun
+                                   (for [work worklist]
+                                     (let [node (get-node work)
+                                           descendants (get-descendants work)
+                                           children (map get-node descendants)]
+                                       (swap! result conj
+                                              (ntx/statement
+                                               (str/join &quot; &quot;
+                                                         [&quot;MERGE (node:CallGraphNode {name:{name},dex:{dexsha256},signature:{signature}})&quot;
+                                                          &quot;FOREACH (&quot;
+                                                          &quot;child in {children} |&quot;
+                                                          &quot;  MERGE (childnode:CallGraphNode {name:child.name,signature:child.signature,dex:{dexsha256}})&quot;
+                                                          &quot;  MERGE (node)-[:INVOKE]-&gt;(childnode)&quot;
+                                                          &quot;)&quot;])
+                                               {:dexsha256 dex-sha256
+                                                :name (get-node-name node)
+                                                :signature node
+                                                :children (map #(let [node %]
+                                                                  {:name (get-node-name node)
+                                                                   :signature node})
+                                                               children)}))
+                                       (swap! new-worklist into descendants))))
+                                  (recur @new-worklist)))))))))))))))         
          @result))
       ;; app components
       (ntx/execute
@@ -7041,22 +7234,24 @@ spec\s+resource\s+
                         (map (fn [[label prop]]
                                (str &quot;CREATE INDEX ON :&quot;
                                     label &quot;(&quot; prop &quot;)&quot;))
-                             {&quot;SigningKey&quot; &quot;sha256&quot;
-                              &quot;Apk&quot; &quot;sha256&quot;
-                              &quot;Dex&quot; &quot;sha256&quot;
-                              &quot;Permission&quot; &quot;name&quot;
-                              &quot;Package&quot; &quot;name&quot;
-                              &quot;Class&quot; &quot;name&quot;
-                              &quot;Method&quot; &quot;name&quot;
-                              &quot;MethodInstance&quot; &quot;name&quot;
-                              &quot;Callback&quot; &quot;name&quot;
-                              &quot;Activity&quot; &quot;name&quot;
-                              &quot;Service&quot; &quot;name&quot;
-                              &quot;Receiver&quot; &quot;name&quot;
-                              &quot;IntentFilterAction&quot; &quot;name&quot;
-                              &quot;IntentFilterCategory&quot; &quot;name&quot;
-                              &quot;AndroidAPI&quot; &quot;name&quot;
-                              &quot;Tag&quot; &quot;id&quot;}))]
+                             [[&quot;SigningKey&quot; &quot;sha256&quot;]
+                              [&quot;Apk&quot; &quot;sha256&quot;]
+                              [&quot;Dex&quot; &quot;sha256&quot;]
+                              [&quot;Permission&quot; &quot;name&quot;]
+                              [&quot;Package&quot; &quot;name&quot;]
+                              [&quot;Class&quot; &quot;name&quot;]
+                              [&quot;Method&quot; &quot;name&quot;]
+                              [&quot;MethodInstance&quot; &quot;name&quot;]
+                              [&quot;Callback&quot; &quot;name&quot;]
+                              [&quot;Activity&quot; &quot;name&quot;]
+                              [&quot;Service&quot; &quot;name&quot;]
+                              [&quot;Receiver&quot; &quot;name&quot;]
+                              [&quot;IntentFilterAction&quot; &quot;name&quot;]
+                              [&quot;IntentFilterCategory&quot; &quot;name&quot;]
+                              [&quot;AndroidAPI&quot; &quot;name&quot;]
+                              [&quot;Tag&quot; &quot;id&quot;]
+                              [&quot;CallGraphNode&quot; &quot;name&quot;]
+                              [&quot;CallGraphNode&quot; &quot;dex&quot;]]))]
     (let [conn (connect options)
           transaction (ntx/begin-tx conn)]
       (ntx/commit conn transaction statements))))</pre></td></tr><tr><td class="docs"><p>label =~'^(?:com.)?android' nodes as AndroidAPI; should be infrequently used</p>

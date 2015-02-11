@@ -6212,6 +6212,7 @@ spec\s+resource\s+
    [nil &quot;--soot-debug-show-implicit-cf&quot; &quot;debug facility: show all implicit control flows&quot;]
    [nil &quot;--soot-debug-show-safe-invokes&quot; &quot;debug facility: show all safe invokes&quot;]   
    [&quot;-d&quot; &quot;--dump-model FILE&quot; &quot;dump binary APK model; append dump file paths to FILE&quot;]
+   [&quot;-O&quot; &quot;--overwrite-model&quot; &quot;overwrite model while dumping&quot;]   
    [&quot;-l&quot; &quot;--load-model FILE&quot; &quot;load binary APK model; load from dump file paths in FILE&quot;]
    [&quot;-c&quot; &quot;--convert-model&quot; &quot;convert model between binary and readable formats&quot;]
    [nil &quot;--readable-model&quot; &quot;dump/load readable APK model; --dump/load-model FILE will dump/load readable model directly to/from FILE&quot;]
@@ -6254,7 +6255,7 @@ spec\s+resource\s+
     :as task}
    {:keys [verbose
            soot-task-build-model
-           dump-model readable-model
+           dump-model overwrite-model readable-model
            neo4j-port neo4j-protocol
            neo4j-task-populate neo4j-task-tag neo4j-task-untag
            dump-manifest]
@@ -6268,28 +6269,37 @@ spec\s+resource\s+
           (print (aapt-parse/get-manifest-xml file-path))
           (flush))
         (when soot-task-build-model
-          (let [apk (soot-parse/parse-apk file-path
-                                          (merge options
-                                                 ;; piggyback layout-callbacks on options
-                                                 {:layout-callbacks
-                                                  (aapt-parse/get-layout-callbacks file-path)}))]
-            (when dump-model
-              (try
-                (with-open [model-io (io/writer dump-model :append true)]
-                  (binding [*out* model-io]
-                    (if readable-model
-                      (prn apk)
-                      (let [dump-fname (str (:sha256 apk) &quot;.model-dump&quot;)]
-                        (with-open [model-io (io/output-stream dump-fname)]
-                          (nippy/freeze-to-out! (java.io.DataOutputStream. model-io)
-                                                apk)
-                          ;; write the dump file name out
-                          (println dump-fname))))))
-                (catch Exception e
-                  (print-stack-trace-if-verbose e verbose))))
-            (when neo4j-task-populate
-              (neo4j/populate-from-parsed-apk apk
-                                              options))))
+          (let [apk (apk-parse/parse-apk file-path)
+                dump-fname (str (:sha256 apk) &quot;.model-dump&quot;)]
+            (when (or overwrite-model
+                      (not (and dump-model (fs/exists? dump-fname)
+                                (do
+                                  (when verbose
+                                    (println dump-fname
+                                             &quot;exists: skipped;&quot;
+                                             &quot;overwrite with \&quot;--overwrite-model\&quot;&quot;))
+                                  true))))
+              (let [apk (soot-parse/parse-apk file-path
+                                              (merge options
+                                                     ;; piggyback layout-callbacks on options
+                                                     {:layout-callbacks
+                                                      (aapt-parse/get-layout-callbacks file-path)}))]
+                (when dump-model
+                  (try
+                    (with-open [model-io (io/writer dump-model :append true)]
+                      (binding [*out* model-io]
+                        (if readable-model
+                          (prn apk)
+                          (with-open [model-io (io/output-stream dump-fname)]
+                            (nippy/freeze-to-out! (java.io.DataOutputStream. model-io)
+                                                  apk)
+                            ;; write the dump file name out
+                            (println dump-fname)))))
+                    (catch Exception e
+                      (print-stack-trace-if-verbose e verbose))))
+                (when neo4j-task-populate
+                  (neo4j/populate-from-parsed-apk apk
+                                                  options))))))
         (when (or neo4j-task-tag neo4j-task-untag)
           (when (and verbose (&gt; verbose 1))
             (with-mutex-locked

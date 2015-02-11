@@ -99,6 +99,7 @@
    [nil "--soot-debug-show-safe-invokes" "debug facility: show all safe invokes"]   
    
    ["-d" "--dump-model FILE" "dump binary APK model; append dump file paths to FILE"]
+   ["-O" "--overwrite-model" "overwrite model while dumping"]   
    ["-l" "--load-model FILE" "load binary APK model; load from dump file paths in FILE"]
    ["-c" "--convert-model" "convert model between binary and readable formats"]
    [nil "--readable-model" "dump/load readable APK model; --dump/load-model FILE will dump/load readable model directly to/from FILE"]
@@ -155,7 +156,7 @@
     :as task}
    {:keys [verbose
            soot-task-build-model
-           dump-model readable-model
+           dump-model overwrite-model readable-model
            neo4j-port neo4j-protocol
            neo4j-task-populate neo4j-task-tag neo4j-task-untag
            dump-manifest]
@@ -171,29 +172,38 @@
           (flush))
 
         (when soot-task-build-model
-          (let [apk (soot-parse/parse-apk file-path
-                                          (merge options
-                                                 ;; piggyback layout-callbacks on options
-                                                 {:layout-callbacks
-                                                  (aapt-parse/get-layout-callbacks file-path)}))]
-            (when dump-model
-              (try
-                (with-open [model-io (io/writer dump-model :append true)]
-                  (binding [*out* model-io]
-                    (if readable-model
-                      (prn apk)
-                      (let [dump-fname (str (:sha256 apk) ".model-dump")]
-                        (with-open [model-io (io/output-stream dump-fname)]
-                          (nippy/freeze-to-out! (java.io.DataOutputStream. model-io)
-                                                apk)
-                          ;; write the dump file name out
-                          (println dump-fname))))))
-                (catch Exception e
-                  (print-stack-trace-if-verbose e verbose))))
-            
-            (when neo4j-task-populate
-              (neo4j/populate-from-parsed-apk apk
-                                              options))))
+          (let [apk (apk-parse/parse-apk file-path)
+                dump-fname (str (:sha256 apk) ".model-dump")]
+            (when (or overwrite-model
+                      (not (and dump-model (fs/exists? dump-fname)
+                                (do
+                                  (when verbose
+                                    (println dump-fname
+                                             "exists: skipped;"
+                                             "overwrite with \"--overwrite-model\""))
+                                  true))))
+              (let [apk (soot-parse/parse-apk file-path
+                                              (merge options
+                                                     ;; piggyback layout-callbacks on options
+                                                     {:layout-callbacks
+                                                      (aapt-parse/get-layout-callbacks file-path)}))]
+                (when dump-model
+                  (try
+                    (with-open [model-io (io/writer dump-model :append true)]
+                      (binding [*out* model-io]
+                        (if readable-model
+                          (prn apk)
+                          (with-open [model-io (io/output-stream dump-fname)]
+                            (nippy/freeze-to-out! (java.io.DataOutputStream. model-io)
+                                                  apk)
+                            ;; write the dump file name out
+                            (println dump-fname)))))
+                    (catch Exception e
+                      (print-stack-trace-if-verbose e verbose))))
+                
+                (when neo4j-task-populate
+                  (neo4j/populate-from-parsed-apk apk
+                                                  options))))))
 
         (when (or neo4j-task-tag neo4j-task-untag)
           (when (and verbose (> verbose 1))

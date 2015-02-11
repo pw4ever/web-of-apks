@@ -1,6 +1,6 @@
 #! /bin/bash
 # start-up script with JMX enabled
-# author: Wei Peng <4pengw@gmail.com>
+# author: Wei Peng <write.to.peng.wei@gmail.com>
 # version: 20141229
 # deps: wget
 

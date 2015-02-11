@@ -52,11 +52,11 @@ release.touch: $(SRC)
 	    cp -f $(SRC_MAIN).bak $(SRC_MAIN);\
 	    if [ $$RET -eq 0 ]; then touch $@; else rm -f $@; false; fi; 
 
-release-package: bin/$(NAME) bin/$(NAME)-with-jmx bin/android.jar | release-build
+release-package: bin/$(NAME) bin/$(NAME)-with-jmx bin/android.jar bin/neo4j-batch-import | release-build
 	cp target/uberjar/$(NAME).jar bin/$(NAME).jar
 	tar cvf $(NAME).tar bin
 
-release-install: bin/$(NAME) bin/$(NAME)-with-jmx bin/android.jar | release-build
+release-install: bin/$(NAME) bin/$(NAME)-with-jmx bin/android.jar bin/neo4j-batch-import | release-build
 	cp target/uberjar/$(NAME).jar bin/$(NAME).jar
 	mkdir -p ~/bin/
 	cp bin/* ~/bin/

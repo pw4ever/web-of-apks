@@ -1,0 +1,25 @@
+#! /bin/bash
+
+PREFIX=$1
+
+if [[ "x$PREFIX" == "x" ]]; then
+  echo "${0} <prefix>" > /dev/stderr
+  exit 1
+fi
+
+function work () {
+task=$1
+sha=$(sha256sum $task | awk '{print $1;}')
+fname="${sha}.model-dump"
+if ! [[ -f "${fname}" ]]; then
+  echo "${task}"
+fi
+}
+
+export -f work
+
+export JVM_OPTS=${JVM_OPTS:-'-Xmx9g -Xms7g'}
+
+find "${PREFIX}" -name '*.apk' | parallel work {} | woa --prep-tags ''
+
+

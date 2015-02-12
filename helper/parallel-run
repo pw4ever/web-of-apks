@@ -7,13 +7,14 @@ if [[ "x$PREFIX" == "x" ]]; then
   exit 1
 fi
 
-export JVM_OPTS=${JVM_OPTS:-'-Xmx5g -Xms4g'}
+JVM_HEAP=${JVM_HEAP:-"6g"}
+export JVM_OPTS=${JVM_OPTS:-"-Xmx${JVM_HEAP} -Xms${JVM_HEAP}"}
 
 JOBS=${JOBS:-1}
 
 BLOCK_SIZE=$(du -b ${PREFIX}.list | awk "{ print \$1/${JOBS} }")
 
-WOA_OPTS=${WOA_OPTS:-"-j6 --soot-basic-block-simulation-budget 100 --soot-method-simulation-depth-budget 10"}
+WOA_OPTS=${WOA_OPTS:-"-j3 --soot-basic-block-simulation-budget 100 --soot-method-simulation-depth-budget 10"}
 
 # echo ${JVM_OPTS} ${PREFIX} ${JOBS} ${BLOCK_SIZE} ${WOA_OPTS}
 

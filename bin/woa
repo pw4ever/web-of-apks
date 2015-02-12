@@ -1,11 +1,14 @@
 #! /bin/bash
 # start-up script
 # author: Wei Peng <write.to.peng.wei@gmail.com>
-# version: 20141229
+# version: 20150211
 # deps: wget, java
 
 WGET=${WGET:-'wget'}
 JAVA=${JAVA:-'java'}
+
+JVM_HEAP=${JVM_HEAP:-'5g'}
+JVM_OPTS=${JVM_OPTS:-"-Xmx${JVM_HEAP} -Xms${JVM_HEAP}"}
 
 # http://stackoverflow.com/a/246128
 DIR=$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )
@@ -23,4 +26,4 @@ do
     "${WGET}" -nv -nc -nd -P "${DIR}" "${URL_PREFIX}${content[$index]}"
 done
 
-[ -f "${MAIN_JAR}" ] && "${JAVA}" ${JVM_OPTS--Xmx2048m} -jar "${MAIN_JAR}" "$@"
+[ -f "${MAIN_JAR}" ] && "${JAVA}" ${JVM_OPTS} -jar "${MAIN_JAR}" "$@"

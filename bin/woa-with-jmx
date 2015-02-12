@@ -6,6 +6,9 @@
 
 WGET=${WGET:-'wget'}
 
+JVM_HEAP=${JVM_HEAP:-'5g'}
+JVM_OPTS=${JVM_OPTS:-"-Xmx${JVM_HEAP} -Xms${JVM_HEAP}"}
+
 # http://stackoverflow.com/a/246128
 DIR=$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )
 
@@ -28,7 +31,7 @@ JMX_PORT=$1
 # if the first argument is a number (for JMX port)
 if [ "${JMX_PORT}" -ge 0 ] 2> /dev/null; then
     shift # remove JMX_PORT from the argument list
-    JVM_OPTS="${JVM_OPTS--Xmx2048m} -Dcom.sun.management.jmxremote -Dcom.sun.management.jmxremote.ssl=false -Dcom.sun.management.jmxremote.authenticate=false -Dcom.sun.management.jmxremote.port=${JMX_PORT}" "${MAIN_EXEC}" "$@"
+    JVM_OPTS="${JVM_OPTS} -Dcom.sun.management.jmxremote -Dcom.sun.management.jmxremote.ssl=false -Dcom.sun.management.jmxremote.authenticate=false -Dcom.sun.management.jmxremote.port=${JMX_PORT}" "${MAIN_EXEC}" "$@"
 else # if the first argument is not a port
     "${MAIN_EXEC}" "$@"
 fi

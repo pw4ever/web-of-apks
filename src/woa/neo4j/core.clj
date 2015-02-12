@@ -50,7 +50,7 @@
   "add to batch csv that is to be dumped later"
   [apk
    {:keys [neo4j-include-methodinstance
-           neo4j-include-callgraph]
+           neo4j-no-callgraph]
     :as options}]
   (let [manifest (:manifest apk)
         dex-sha256 (:dex-sha256 apk)
@@ -217,7 +217,7 @@
                                                  {"name" (str invoke-class-name "." invoke-name)}]]
                                      (merge-rel invoke [["DESCEND"] nil] api))))))))
 
-                         (when neo4j-include-callgraph
+                         (when-not neo4j-no-callgraph
                            (let [path (conj path :invoke-paths)
                                  invoke-paths (get-in the-dex path)
                                  get-node (fn [invoke-paths]
@@ -351,7 +351,7 @@
 (defn populate-from-parsed-apk
   "populate the database with the parsed apk structure"
   [apk {:keys [neo4j-include-methodinstance
-               neo4j-include-callgraph]
+               neo4j-no-callgraph]
         :as options}]
   (let [manifest (:manifest apk)
         dex-sha256 (:dex-sha256 apk)
@@ -591,7 +591,7 @@
                                             (merge {:apiname (str api-class-name "." api-name)
                                                     :invokename (str invoke-class-name "." invoke-name)}))))))))))
 
-                        (when neo4j-include-callgraph
+                        (when-not neo4j-no-callgraph
                           (let [path (conj path :invoke-paths)
                                 invoke-paths (get-in dex path)
                                 get-node (fn [invoke-paths]

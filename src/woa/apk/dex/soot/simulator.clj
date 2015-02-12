@@ -462,18 +462,22 @@
     :as simulation-params}
    {:keys [soot-method-simulation-depth-budget
            soot-simulation-conservative-branching
+           soot-simulation-linear-scan
            soot-debug-show-each-statement
            soot-debug-show-locals-per-statement
            soot-debug-show-all-per-statement
            verbose]
     :as options}]
   (let [simulator (atom simulator)
-
-        ;; split at first branch or return
+        
         [basic-block residue]
-        (split-with #(let [^Stmt stmt %]
-                       (and (.. stmt fallsThrough)
-                            (not (.. stmt branches))))
+        (split-with (if soot-simulation-linear-scan
+                      ;; linear scan do not split at branching
+                      (constantly true)
+                      ;; otherwise, split at first branch or return
+                      #(let [^Stmt stmt %]
+                         (and (.. stmt fallsThrough)
+                              (not (.. stmt branches)))))
                     (subvec (:stmts stmt-info)
                             (get (:stmt-2-index stmt-info)
                                  start-stmt)))]

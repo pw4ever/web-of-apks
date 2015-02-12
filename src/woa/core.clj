@@ -79,7 +79,8 @@
    [nil "--soot-simulation-collection-size-budget BUDGET" "array size simulation budget"
     :parse-fn #(Long/parseLong %)
     :default 100]   
-   [nil "--soot-simulation-conservative-branching" "conservative branching: good: sensitive to conditions; bad: may not cover important branches before budget is depleted"]
+   [nil "--soot-simulation-conservative-branching" "branching based on conditions: more precision at the cost of less coverage before budget depletion."]
+   [nil "--soot-simulation-linear-scan" "do not branch or loop: more coverage at the cost of precision"]   
    ["-j" "--soot-parallel-jobs JOBS"
     "number of concurrent threads for analyzing methods"
     :parse-fn #(Integer/parseInt %)
@@ -124,7 +125,7 @@
    ["-t" "--neo4j-task-tag" "tag Neo4j Apk nodes with labels"]
    ["-T" "--neo4j-task-untag" "untag Neo4j Apk nodes with labels"]
    [nil "--neo4j-include-methodinstance" "include MethodInstance in the WoA model"]
-   [nil "--neo4j-include-callgraph" "include call graph (CG) in the WoA model"]   
+   [nil "--neo4j-no-callgraph" "not include call graph (CG) in the WoA model"]   
    ["-D" "--neo4j-dump-model-batch-csv PREFIX" "dump Neo4j batch import CSV files to PREFIX; ref: https://github.com/jexp/batch-import/tree/2.1"]
    
    ;; misc tasks

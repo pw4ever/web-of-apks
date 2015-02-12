@@ -2,7 +2,7 @@
 <!-- DON'T EDIT THIS SECTION, INSTEAD RE-RUN doctoc TO UPDATE -->
 **Table of Contents**  *generated with [DocToc](http://doctoc.herokuapp.com/)*
 
-- [woa](#woa)
+- [Web of APKs (woa)](#web-of-apks-woa)
   - [Use](#use)
     - [Dependency](#dependency)
     - [Bootstrapping](#bootstrapping)
@@ -154,7 +154,7 @@ See [Makefile](https://github.com/pw4ever/web-of-apks/blob/gh-pages/Makefile) fo
 
 ## License
 
-Copyright © 2014 Wei "pw" Peng (4pengw@gmail.com)
+Copyright © Wei "pw" Peng (write.to.peng.wei@gmail.com)
 
 Distributed under the Eclipse Public License either version 1.0 or (at
 your option) any later version.

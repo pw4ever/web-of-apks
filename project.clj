@@ -17,6 +17,7 @@
                  ;;[clj-http "1.0.1"]
                  [pandect "0.4.1"]
                  [commons-io/commons-io "2.4"]
+                 [incanter/incanter-core "1.5.6"]
                  [me.raynes/fs "1.4.6"]
                  [com.taoensso/nippy "2.7.1"]
                  [clojurewerkz/neocons "3.0.0"]]

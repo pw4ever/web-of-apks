@@ -256,7 +256,26 @@
                                               (merge-node child-node)
                                               (merge-rel parent-node [["INVOKE"] nil] child-node))))
                                          (swap! new-worklist into descendants))))
-                                    @new-worklist)))))))))))))))))
+                                    @new-worklist))))))
+                         
+                         ;; callback signature
+                         (let [path (conj path :invoke-paths)
+                               invoke-paths (get-in the-dex path)]
+                           (when invoke-paths
+                             (let [cgdfd (compute-cgdfd invoke-paths)
+                                   signature (compute-cgdfd-signature cgdfd)]
+                               (when signature
+                                 (let [signature-node
+                                       [["CallbackSignature"]
+                                        {"name"  (str comp-class-name "." callback-name)
+                                         "apk" apk-sha256
+                                         "signature:double_array"
+                                         (->> signature
+                                              (map str)
+                                              (str/join ","))}]]
+                                   (merge-node signature-node)
+                                   (merge-rel apk [["CALLBACK_SIGNATURE"] nil] signature-node)
+                                   (merge-rel callback [["CALLBACK_SIGNATURE"] nil] signature-node)))))))))))))))))
 
       ;; app components
       (doseq [comp-type [:activity :service :receiver]]
@@ -723,28 +742,29 @@
                                  :callbacks
                                  callback-name]]
                        (let [path (conj path :invoke-paths)
-                             invoke-paths (get-in the-dex path)
-                             cgdfd (compute-cgdfd invoke-paths)
-                             signature (compute-cgdfd-signature cgdfd)]
-                         (when signature
-                           (let [statements (atom [])]
-                             (swap! statements conj
-                                    (ntx/statement
-                                     (str/join " "
-                                               ["MATCH (a:Apk {sha256:{apksha256}})"
-                                                "MATCH (cb:Callback {name:{callbackname}})"
-                                                "MERGE (sig:CallbackSignature {name:{callbackname},apk:{apksha256}})"
-                                                "MERGE (a)-[:CALLBACK_SIGNATURE]->(sig)<-[:CALLBACK_SIGNATURE]-(cb)"
-                                                "SET sig.signature={signature}"])
-                                     {:apksha256 apk-sha256
-                                      :callbackname (str comp-class-name "." callback-name)
-                                      :signature signature}))
-                             (let [conn (connect options)
-                                   transaction (ntx/begin-tx conn)]
-                               (try
-                                 (ntx/commit conn transaction @statements)
-                                 (catch Exception e
-                                   (print-stack-trace-if-verbose e verbose))))))))))))))))))))
+                             invoke-paths (get-in the-dex path)]
+                         (when invoke-paths
+                           (let [cgdfd (compute-cgdfd invoke-paths)
+                                 signature (compute-cgdfd-signature cgdfd)]
+                             (when signature
+                               (let [statements (atom [])]
+                                 (swap! statements conj
+                                        (ntx/statement
+                                         (str/join " "
+                                                   ["MATCH (a:Apk {sha256:{apksha256}})"
+                                                    "MATCH (cb:Callback {name:{callbackname}})"
+                                                    "MERGE (sig:CallbackSignature {name:{callbackname},apk:{apksha256}})"
+                                                    "MERGE (a)-[:CALLBACK_SIGNATURE]->(sig)<-[:CALLBACK_SIGNATURE]-(cb)"
+                                                    "SET sig.signature={signature}"])
+                                         {:apksha256 apk-sha256
+                                          :callbackname (str comp-class-name "." callback-name)
+                                          :signature signature}))
+                                 (let [conn (connect options)
+                                       transaction (ntx/begin-tx conn)]
+                                   (try
+                                     (ntx/commit conn transaction @statements)
+                                     (catch Exception e
+                                       (print-stack-trace-if-verbose e verbose))))))))))))))))))))))
 
 (defn remove-callback-signature
   "remove component callback signature"

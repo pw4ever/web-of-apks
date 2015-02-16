@@ -1,13 +1,14 @@
 #! /bin/bash
 # start-up script with JMX enabled
 # author: Wei Peng <write.to.peng.wei@gmail.com>
-# version: 20141229
+# version: 20150215
 # deps: wget
 
 WGET=${WGET:-'wget'}
 
-JVM_HEAP=${JVM_HEAP:-'5g'}
-JVM_OPTS=${JVM_OPTS:-"-Xmx${JVM_HEAP} -Xms${JVM_HEAP}"}
+if [[ -n "${JVM_HEAP}" ]]; then
+  JVM_OPTS=${JVM_OPTS:-"-Xmx${JVM_HEAP} -Xms${JVM_HEAP}"}
+fi
 
 # http://stackoverflow.com/a/246128
 DIR=$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )

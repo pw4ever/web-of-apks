@@ -18,8 +18,4 @@ fi
 
 export -f work
 
-export JVM_OPTS=${JVM_OPTS:-'-Xmx9g -Xms7g'}
-
 find "${PREFIX}" -name '*.apk' | parallel work {} | woa --prep-tags ''
-
-

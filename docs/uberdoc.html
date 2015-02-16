@@ -6631,17 +6631,22 @@ spec\s+resource\s+
 </td><td class="codes"><pre class="brush: clojure">(defn compute-cgdfd-signature
   [cgdfd]
   (try
-    (let [cgdfd (mapcat #(let [[out-degree multiplicity] %]
+    (let [total (reduce + (vals cgdfd))
+          cgdfd (mapcat #(let [[out-degree multiplicity] %]
                            (repeat multiplicity out-degree))
                         cgdfd)]
       ;; filter on NaN
-      (-&gt;&gt; [(stats/mean cgdfd)
+      (-&gt;&gt; [total
+            (stats/mean cgdfd)
             (stats/sd cgdfd)
             (stats/skewness cgdfd)
             (stats/kurtosis cgdfd)]
            (map #(let [n %]
                    (cond
-                     (.isNaN n) 0
+                     (try
+                       (.isNaN n)
+                       (catch Exception e false))
+                     0
                      :otherwise n)))
            vec))
     (catch Exception e

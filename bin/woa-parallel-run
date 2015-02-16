@@ -7,15 +7,10 @@ if [[ "x$PREFIX" == "x" ]]; then
   exit 1
 fi
 
-JVM_HEAP=${JVM_HEAP:-"6g"}
-export JVM_OPTS=${JVM_OPTS:-"-Xmx${JVM_HEAP} -Xms${JVM_HEAP}"}
-
 JOBS=${JOBS:-1}
 
 BLOCK_SIZE=$(du -b ${PREFIX}.list | awk "{ print \$1/${JOBS} }")
 
 WOA_OPTS=${WOA_OPTS:-"-j3 --soot-basic-block-simulation-budget 100 --soot-method-simulation-depth-budget 10"}
 
-# echo ${JVM_OPTS} ${PREFIX} ${JOBS} ${BLOCK_SIZE} ${WOA_OPTS}
-
-cat ${PREFIX}.list | parallel --env JVM_OPTS --block ${BLOCK_SIZE} --pipe -j ${JOBS} -u "woa -sv --dump-model ${PREFIX}{%}.dump ${WOA_OPTS}"
+cat ${PREFIX}.list | parallel --env JVM_HEAP --env JVM_OPTS --env JVM_MORE_OPTS --block ${BLOCK_SIZE} --pipe -j ${JOBS} -u "woa -sv --dump-model ${PREFIX}{%}.dump ${WOA_OPTS}"

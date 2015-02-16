@@ -23,17 +23,24 @@
   "compute the CGDFD-based signature from the input CGDFD (replace NaN with 0)"
   [cgdfd]
   (try
-    (let [cgdfd (mapcat #(let [[out-degree multiplicity] %]
+    (let [total (reduce + (vals cgdfd))
+          cgdfd (mapcat #(let [[out-degree multiplicity] %]
                            (repeat multiplicity out-degree))
                         cgdfd)]
       ;; filter on NaN
-      (->> [(stats/mean cgdfd)
+      (->> [total
+            (stats/mean cgdfd)
             (stats/sd cgdfd)
             (stats/skewness cgdfd)
             (stats/kurtosis cgdfd)]
            (map #(let [n %]
                    (cond
-                     (.isNaN n) 0
+                     
+                     (try
+                       (.isNaN n)
+                       (catch Exception e false))
+                     0
+                     
                      :otherwise n)))
            vec))
     (catch Exception e

@@ -49,5 +49,6 @@ done
 # JVM options
 JVM_HEAP=${JVM_HEAP:-5g}
 JVM_OPTS=${JVM_OPTS:-"-Xmx${JVM_HEAP} -Xms${JVM_HEAP}"}
+JVM_MORE_OPTS=${JVM_MORE_OPTS:-""}
 
-"${JAVA}" -classpath "${CP}" ${JVM_OPTS} -Dfile.encoding=UTF-8 org.neo4j.batchimport.Importer batch.properties "$DB" "$NODES" "$RELS" "$@"
+"${JAVA}" -classpath "${CP}" ${JVM_OPTS} ${JVM_MORE_OPTS} -Dfile.encoding=UTF-8 org.neo4j.batchimport.Importer batch.properties "$DB" "$NODES" "$RELS" "$@"

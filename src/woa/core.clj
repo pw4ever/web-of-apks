@@ -2,6 +2,9 @@
   ;; internal libs
   (:require [woa.util
              :refer [print-stack-trace-if-verbose]]
+            [woa.core.signature
+             :refer [compute-cgdfd-signature
+                     compute-cgdfd]]
             [woa.apk.parse
              :as apk-parse]
             [woa.apk.aapt.parse
@@ -124,6 +127,8 @@
    ["-n" "--neo4j-task-populate" "populate Neo4j with APK model"]
    ["-t" "--neo4j-task-tag" "tag Neo4j Apk nodes with labels"]
    ["-T" "--neo4j-task-untag" "untag Neo4j Apk nodes with labels"]
+   ["-g" "--neo4j-task-add-callback-signature" "add Neo4j CallbackSignature nodes"]
+   ["-G" "--neo4j-task-remove-callback-signature" "remove Neo4j CallbackSignature nodes"]   
    [nil "--neo4j-include-methodinstance" "include MethodInstance in the WoA model"]
    [nil "--neo4j-no-callgraph" "not include call graph (CG) in the WoA model"]   
    ["-D" "--neo4j-dump-model-batch-csv PREFIX" "dump Neo4j batch import CSV files to PREFIX; ref: https://github.com/jexp/batch-import/tree/2.1"]
@@ -160,6 +165,7 @@
            dump-model overwrite-model readable-model
            neo4j-port neo4j-protocol
            neo4j-task-populate neo4j-task-tag neo4j-task-untag
+           neo4j-task-add-callback-signature neo4j-task-remove-callback-signature
            dump-manifest]
     :as options}]
   (when (and file-path (fs/readable? file-path))
@@ -204,21 +210,27 @@
                 
                 (when neo4j-task-populate
                   (neo4j/populate-from-parsed-apk apk
-                                                  options))))))
+                                                  options))
+                
+                (cond
+                  neo4j-task-add-callback-signature
+                  (try
+                    (neo4j/add-callback-signature apk
+                                                  options)
+                    (catch Exception e
+                      (print-stack-trace-if-verbose e verbose)))
 
-        (when (or neo4j-task-tag neo4j-task-untag)
-          (when (and verbose (> verbose 1))
-            (with-mutex-locked
-              (println "Neo4j:" (cond
-                                  neo4j-task-tag "tag"
-                                  neo4j-task-untag "untag")
-                       file-path
-                       (pr-str tags))))
-          
-          (let [apk (apk-parse/parse-apk file-path)]
-            (cond
-              neo4j-task-tag (neo4j/tag-apk apk tags options)
-              neo4j-task-untag (neo4j/untag-apk apk tags options))))
+                  neo4j-task-remove-callback-signature
+                  (try
+                    (neo4j/remove-callback-signature apk
+                                                     options)
+                    (catch Exception e
+                      (print-stack-trace-if-verbose e verbose))))))))
+        
+        (let [apk (apk-parse/parse-apk file-path)]
+          (cond
+            neo4j-task-tag (neo4j/tag-apk apk tags options)
+            neo4j-task-untag (neo4j/untag-apk apk tags options)))        
         
         (when (and verbose (> verbose 0))
           (with-mutex-locked
@@ -245,6 +257,7 @@
                 load-model dump-model convert-model println-model pprint-model
                 readable-model
                 neo4j-task-populate
+                neo4j-task-add-callback-signature neo4j-task-remove-callback-signature
                 neo4j-dump-model-batch-csv]} options]
     (try
       ;; print out error messages if any
@@ -415,6 +428,21 @@
                               (try
                                 (neo4j/populate-from-parsed-apk apk
                                                                 options)
+                                (catch Exception e
+                                  (print-stack-trace-if-verbose e verbose))))
+
+                            (cond
+                              neo4j-task-add-callback-signature
+                              (try
+                                (neo4j/add-callback-signature apk
+                                                              options)
+                                (catch Exception e
+                                  (print-stack-trace-if-verbose e verbose)))
+
+                              neo4j-task-remove-callback-signature
+                              (try
+                                (neo4j/remove-callback-signature apk
+                                                                 options)
                                 (catch Exception e
                                   (print-stack-trace-if-verbose e verbose)))))
                           (recur (read-line))))))))

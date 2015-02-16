@@ -1,7 +1,6 @@
 (ns woa.apk.dex.soot.util
   ;; internal libs
-  (:require [woa.util
-             :refer [print-stack-trace-if-verbose]])
+  (:use woa.util)
   ;; common libs
   (:require [clojure.string :as str]
             [clojure.set :as set]
@@ -28,7 +27,6 @@
 
 ;;; declaration
 
-(declare process-worklist)
 (declare soot-queryable?)
 (declare find-method-candidates)
 (declare get-application-classes get-application-methods)
@@ -44,19 +42,6 @@
 (declare mute unmute with-silence)
 
 ;;; implementation
-
-;;
-;; common code patterns
-;; 
-
-(defn process-worklist
-  "process worklist until it is empty
-
-process takes a worklist as input, and outputs the new worklist"
-  [initial-worklist process]
-  (loop [worklist initial-worklist]
-    (when-not (empty? worklist)
-      (recur (process worklist)))))
 
 ;;
 ;; SootQuery

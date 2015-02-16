@@ -72,6 +72,11 @@ node.Callback {
   caption: '{name}';
 }
 
+node.CallbackSignature {
+  color: #F0E111;
+  caption: '{name}';
+}
+
 node.Tag {
   color: #FFDD00;
   caption: '{id}';

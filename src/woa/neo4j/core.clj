@@ -1,7 +1,8 @@
 (ns woa.neo4j.core
   ;; internal libs
-  (:require [woa.util
-             :refer [print-stack-trace-if-verbose]])  
+  (:use woa.util)
+  (:use (woa.core invoke-path
+                  signature))
   ;; common libs
   (:require [clojure.string :as str]
             [clojure.set :as set]
@@ -17,6 +18,7 @@
 (declare populate-from-parsed-apk
          add-to-batch-csv dump-batch-csv
          tag-apk untag-apk
+         add-callback-signature remove-callback-signature
          create-index mark-android-api
          connect android-api?)
 
@@ -219,68 +221,42 @@
 
                          (when-not neo4j-no-callgraph
                            (let [path (conj path :invoke-paths)
-                                 invoke-paths (get-in the-dex path)
-                                 get-node (fn [invoke-paths]
-                                            (cond
-                                              (map? invoke-paths) (->> invoke-paths keys first)
-                                              :otherwise invoke-paths))
-                                 get-descendants (fn [invoke-paths]
-                                                   (cond
-                                                     (map? invoke-paths) (->> invoke-paths vals first)
-                                                     :otherwise nil))
-                                 get-node-name (fn [node]
-                                                 (cond
-                                                   ;; Soot signature format
-                                                   (re-matches #"<[^>]+>" node)
-                                                   (let [[_ class method]
-                                                         (re-find #"^<([^:]+):\s+\S+\s+([^(]+)\("
-                                                                  node)]
-                                                     (str class "." method))
-
-                                                   (re-matches #"[^<]+\[.+\]" node)
-                                                   (let [[_ classmethod]
-                                                         (re-find #"^(.+)\[" node)]
-                                                     classmethod)
-
-                                                   :otherwise
-                                                   node))]
+                                 invoke-paths (get-in the-dex path)]
                              (when invoke-paths
                                ;; link the root node to the Callback and the Dex
-                               (let [first-node (get-node invoke-paths)
+                               (let [root-node (invoke-path-get-node invoke-paths)
                                      node [["CallGraphNode"]
-                                           {"name" (get-node-name first-node)
-                                            "signature" first-node
+                                           {"name" (invoke-path-get-node-name root-node)
+                                            "signature" root-node
                                             "dex" dex-sha256}]]
                                  (merge-node node)
                                  (merge-rel dex [["CALLGRAPH"] nil] node)
                                  (merge-rel callback [["CALLGRAPH"] nil] node))
                                ;; iteratively link descendants
-                               (loop [worklist #{invoke-paths}]
-                                 (when-not (empty? worklist)
-                                   (let [new-worklist (atom #{})]
-                                     (dorun
-                                      (for [work worklist]
-                                        (let [node (get-node work)
-                                              descendants (get-descendants work)
-                                              children (map get-node descendants)
-                                              parent-node [["CallGraphNode"]
-                                                           {"name" (get-node-name node)
-                                                            "signature" node
-                                                            "dex" dex-sha256}]]
-                                          (merge-node parent-node)
-                                          (dorun
-                                           (for [child children]
-                                             (let [child-node [["CallGraphNode"]
-                                                               {"name" (get-node-name child)
-                                                                "signature" child
-                                                                "dex" dex-sha256}]]
-                                               (merge-node child-node)
-                                               (merge-rel parent-node [["INVOKE"] nil] child-node))))
-                                          (swap! new-worklist into descendants))))
-                                     (recur @new-worklist)))))))                         
-
-                                                 
-                         )))))))))))
+                               (process-worklist
+                                #{invoke-paths}
+                                (fn [worklist]
+                                  (let [new-worklist (atom #{})]
+                                    (dorun
+                                     (for [work worklist]
+                                       (let [node (invoke-path-get-node work)
+                                             descendants (invoke-path-get-descendants work)
+                                             children (map invoke-path-get-node descendants)
+                                             parent-node [["CallGraphNode"]
+                                                          {"name" (invoke-path-get-node-name node)
+                                                           "signature" node
+                                                           "dex" dex-sha256}]]
+                                         (merge-node parent-node)
+                                         (dorun
+                                          (for [child children]
+                                            (let [child-node [["CallGraphNode"]
+                                                              {"name" (invoke-path-get-node-name child)
+                                                               "signature" child
+                                                               "dex" dex-sha256}]]
+                                              (merge-node child-node)
+                                              (merge-rel parent-node [["INVOKE"] nil] child-node))))
+                                         (swap! new-worklist into descendants))))
+                                    @new-worklist)))))))))))))))))
 
       ;; app components
       (doseq [comp-type [:activity :service :receiver]]
@@ -593,32 +569,8 @@
 
                         (when-not neo4j-no-callgraph
                           (let [path (conj path :invoke-paths)
-                                invoke-paths (get-in dex path)
-                                get-node (fn [invoke-paths]
-                                           (cond
-                                             (map? invoke-paths) (->> invoke-paths keys first)
-                                             :otherwise invoke-paths))
-                                get-descendants (fn [invoke-paths]
-                                                  (cond
-                                                    (map? invoke-paths) (->> invoke-paths vals first)
-                                                    :otherwise nil))
-                                get-node-name (fn [node]
-                                                (cond
-                                                  ;; Soot signature format
-                                                  (re-matches #"<[^>]+>" node)
-                                                  (let [[_ class method]
-                                                        (re-find #"^<([^:]+):\s+\S+\s+([^(]+)\("
-                                                                 node)]
-                                                    (str class "." method))
-
-                                                  (re-matches #"[^<]+\[.+\]" node)
-                                                  (let [[_ classmethod]
-                                                        (re-find #"^(.+)\[" node)]
-                                                    classmethod)
-
-                                                  :otherwise
-                                                  node))]
-                            (when-let [first-node (get-node invoke-paths)]
+                                invoke-paths (get-in dex path)]
+                            (when-let [root-node (invoke-path-get-node invoke-paths)]
                               ;; link the root node to the Callback and the Dex
                               (swap! result conj
                                      (ntx/statement
@@ -628,36 +580,36 @@
                                                  "MERGE (cgnode:CallGraphNode {name:{name},dex:{dexsha256},signature:{signature}})"
                                                  "MERGE (dex)-[:CALLGRAPH]->(cgnode)<-[:CALLGRAPH]-(callback)"])
                                       {:dexsha256 dex-sha256
-                                       :name (get-node-name first-node)
-                                       :signature first-node
+                                       :name (invoke-path-get-node-name root-node)
+                                       :signature root-node
                                        :callbackname (str class-name "." callback-name)})))
-                            (loop [worklist #{invoke-paths}]
-                              (when-not (empty? worklist)
-                                (let [new-worklist (atom #{})]
-                                  (dorun
-                                   (for [work worklist]
-                                     (let [node (get-node work)
-                                           descendants (get-descendants work)
-                                           children (map get-node descendants)]
-                                       (swap! result conj
-                                              (ntx/statement
-                                               (str/join " "
-                                                         ["MERGE (node:CallGraphNode {name:{name},dex:{dexsha256},signature:{signature}})"
-                                                          "FOREACH ("
-                                                          "child in {children} |"
-                                                          "  MERGE (childnode:CallGraphNode {name:child.name,signature:child.signature,dex:{dexsha256}})"
-                                                          "  MERGE (node)-[:INVOKE]->(childnode)"
-                                                          ")"])
-                                               {:dexsha256 dex-sha256
-                                                :name (get-node-name node)
-                                                :signature node
-                                                :children (map #(let [node %]
-                                                                  {:name (get-node-name node)
-                                                                   :signature node})
-                                                               children)}))
-                                       (swap! new-worklist into descendants))))
-                                  (recur @new-worklist))))))
-                        )))))))))         
+                            (process-worklist
+                             #{invoke-paths}
+                             (fn [worklist]
+                               (let [new-worklist (atom #{})]
+                                 (dorun
+                                  (for [work worklist]
+                                    (let [node (invoke-path-get-node work)
+                                          descendants (invoke-path-get-descendants work)
+                                          children (map invoke-path-get-node descendants)]
+                                      (swap! result conj
+                                             (ntx/statement
+                                              (str/join " "
+                                                        ["MERGE (node:CallGraphNode {name:{name},dex:{dexsha256},signature:{signature}})"
+                                                         "FOREACH ("
+                                                         "child in {children} |"
+                                                         "  MERGE (childnode:CallGraphNode {name:child.name,signature:child.signature,dex:{dexsha256}})"
+                                                         "  MERGE (node)-[:INVOKE]->(childnode)"
+                                                         ")"])
+                                              {:dexsha256 dex-sha256
+                                               :name (invoke-path-get-node-name node)
+                                               :signature node
+                                               :children (map #(let [node %]
+                                                                 {:name (invoke-path-get-node-name node)
+                                                                  :signature node})
+                                                              children)}))
+                                      (swap! new-worklist into descendants))))
+                                 @new-worklist))))))))))))))         
          
          @result))
       
@@ -701,7 +653,9 @@
       ;; any more query within the transaction?
       )))
 
-(let [common (fn [apk tags options op]
+(let [common (fn [apk tags
+                  {:keys [verbose] :as options}
+                  op]
                (when-not (empty? tags)
                  (let [statements (atom [])
                        apk-sha256 (:sha256 apk)]
@@ -730,7 +684,7 @@
                      (try
                        (ntx/commit conn transaction @statements)
                        (catch Exception e
-                         (print-stack-trace e)))))))]
+                         (print-stack-trace-if-verbose e verbose)))))))]
   
   (defn tag-apk
   "tag an existing Apk node with the tags"
@@ -742,6 +696,77 @@
   [apk tags
    {:keys [] :as options}]
   (common apk tags options :untag)))
+
+(defn add-callback-signature
+  "add component callback signature"
+  [apk
+   {:keys [verbose] :as options}]
+  (let [apk-sha256 (:sha256 apk)
+        the-dex (:dex apk)]
+    (dorun
+     (for [comp-package-name (->> the-dex keys)]
+       (do
+         (dorun
+          (for [comp-class-name (->> (get-in the-dex
+                                             [comp-package-name])
+                                     keys)]
+            (do
+              (let [{:keys [android-api-ancestors callbacks]}
+                    (->> (get-in the-dex
+                                 [comp-package-name
+                                  comp-class-name]))]
+                (dorun
+                 (for [callback-name (->> callbacks keys)]
+                   (do
+                     (let [path [comp-package-name
+                                 comp-class-name
+                                 :callbacks
+                                 callback-name]]
+                       (let [path (conj path :invoke-paths)
+                             invoke-paths (get-in the-dex path)
+                             cgdfd (compute-cgdfd invoke-paths)
+                             signature (compute-cgdfd-signature cgdfd)]
+                         (when signature
+                           (let [statements (atom [])]
+                             (swap! statements conj
+                                    (ntx/statement
+                                     (str/join " "
+                                               ["MATCH (a:Apk {sha256:{apksha256}})"
+                                                "MATCH (cb:Callback {name:{callbackname}})"
+                                                "MERGE (sig:CallbackSignature {name:{callbackname},apk:{apksha256}})"
+                                                "MERGE (a)-[:CALLBACK_SIGNATURE]->(sig)<-[:CALLBACK_SIGNATURE]-(cb)"
+                                                "SET sig.signature={signature}"])
+                                     {:apksha256 apk-sha256
+                                      :callbackname (str comp-class-name "." callback-name)
+                                      :signature signature}))
+                             (let [conn (connect options)
+                                   transaction (ntx/begin-tx conn)]
+                               (try
+                                 (ntx/commit conn transaction @statements)
+                                 (catch Exception e
+                                   (print-stack-trace-if-verbose e verbose))))))))))))))))))))
+
+(defn remove-callback-signature
+  "remove component callback signature"
+  [apk
+   {:keys [verbose] :as options}]
+  (let [apk-sha256 (:sha256 apk)]
+    (let [statements (atom [])]
+      (swap! statements conj
+             (ntx/statement
+              (str/join " "
+                        ["MATCH (a:Apk {sha256:{apksha256}})-[:CALLBACK_SIGNATURE]->(sig:CallbackSignature)"
+                         "WITH sig"
+                         "MATCH (sig)<-[e:CALLBACK_SIGNATURE]-()"
+                         "DELETE sig, e"])
+              {:apksha256 apk-sha256}))
+      (let [conn (connect options)
+            transaction (ntx/begin-tx conn)]
+        (try
+          (ntx/commit conn transaction @statements)
+          (catch Exception e
+            (print-stack-trace-if-verbose e verbose)))))))
+
 
 (defn create-index
   "create index"
@@ -768,7 +793,9 @@
                               ["AndroidAPI" "name"]
                               ["Tag" "id"]
                               ["CallGraphNode" "name"]
-                              ["CallGraphNode" "dex"]]))]
+                              ["CallGraphNode" "dex"]
+                              ["CallbackSignature" "apk"]
+                              ["CallbackSignature" "name"]]))]
     (let [conn (connect options)
           transaction (ntx/begin-tx conn)]
       (ntx/commit conn transaction statements))))

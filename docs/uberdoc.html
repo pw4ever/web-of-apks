@@ -2866,7 +2866,7 @@ net.brehaut.ClojureTools = (function (SH) {
   };
 })(SyntaxHighlighter);
 </script><title>woa -- Marginalia</title></head><body><table><tr><td class="docs"><div class="header"><h1 class="project-name"><a href="https://github.com/pw4ever/woa">woa</a></h1><h2 class="project-version">0.1.0-SNAPSHOT</h2><br />
-</div><div class="dependencies"><h3>dependencies</h3><table><tr><td class="dep-name">org.clojure/clojure</td><td class="dotted"><hr /></td><td class="dep-version">1.6.0</td></tr><tr><td class="dep-name">org.clojure/tools.cli</td><td class="dotted"><hr /></td><td class="dep-version">0.3.1</td></tr><tr><td class="dep-name">org.clojure/tools.nrepl</td><td class="dotted"><hr /></td><td class="dep-version">0.2.5</td></tr><tr><td class="dep-name">org.clojure/data.json</td><td class="dotted"><hr /></td><td class="dep-version">0.2.5</td></tr><tr><td class="dep-name">org.clojure/core.async</td><td class="dotted"><hr /></td><td class="dep-version">0.1.346.0-17112a-alpha</td></tr><tr><td class="dep-name">asmdex/asmdex</td><td class="dotted"><hr /></td><td class="dep-version">1.0</td></tr><tr><td class="dep-name">soot/soot</td><td class="dotted"><hr /></td><td class="dep-version">1.0</td></tr><tr><td class="dep-name">pandect</td><td class="dotted"><hr /></td><td class="dep-version">0.4.1</td></tr><tr><td class="dep-name">commons-io/commons-io</td><td class="dotted"><hr /></td><td class="dep-version">2.4</td></tr><tr><td class="dep-name">me.raynes/fs</td><td class="dotted"><hr /></td><td class="dep-version">1.4.6</td></tr><tr><td class="dep-name">com.taoensso/nippy</td><td class="dotted"><hr /></td><td class="dep-version">2.7.1</td></tr><tr><td class="dep-name">clojurewerkz/neocons</td><td class="dotted"><hr /></td><td class="dep-version">3.0.0</td></tr></table></div></td><td class="codes" style="text-align: center; vertical-align: middle;color: #666;padding-right:20px"><br /><br /><br />(this space intentionally left almost blank)</td></tr><tr><td class="docs"><div class="toc"><a name="toc"><h3>namespaces</h3></a><ul><li><a href="#woa.apk.aapt.parse">woa.apk.aapt.parse</a></li><li><a href="#woa.apk.dex.asmdex.opcodes">woa.apk.dex.asmdex.opcodes</a></li><li><a href="#woa.apk.dex.asmdex.parse">woa.apk.dex.asmdex.parse</a></li><li><a href="#woa.apk.dex.asmdex.util">woa.apk.dex.asmdex.util</a></li><li><a href="#woa.apk.dex.parse">woa.apk.dex.parse</a></li><li><a href="#woa.apk.dex.soot.parse">woa.apk.dex.soot.parse</a></li><li><a href="#woa.apk.dex.soot.sexp">woa.apk.dex.soot.sexp</a></li><li><a href="#woa.apk.dex.soot.simulator">woa.apk.dex.soot.simulator</a></li><li><a href="#woa.apk.dex.soot.util">woa.apk.dex.soot.util</a></li><li><a href="#woa.apk.parse">woa.apk.parse</a></li><li><a href="#woa.apk.util">woa.apk.util</a></li><li><a href="#woa.core">woa.core</a></li><li><a href="#woa.neo4j.core">woa.neo4j.core</a></li><li><a href="#woa.neo4j.recipe">woa.neo4j.recipe</a></li><li><a href="#woa.util">woa.util</a></li><li><a href="#woa.virustotal.core">woa.virustotal.core</a></li></ul></div></td><td class="codes">&nbsp;</td></tr><tr><td class="docs"><div class="docs-header"><a class="anchor" href="#woa.apk.aapt.parse" name="woa.apk.aapt.parse"><h1 class="project-name">woa.apk.aapt.parse</h1><a class="toc-link" href="#toc">toc</a></a></div></td><td class="codes" /></tr><tr><td class="docs">
+</div><div class="dependencies"><h3>dependencies</h3><table><tr><td class="dep-name">org.clojure/clojure</td><td class="dotted"><hr /></td><td class="dep-version">1.6.0</td></tr><tr><td class="dep-name">org.clojure/tools.cli</td><td class="dotted"><hr /></td><td class="dep-version">0.3.1</td></tr><tr><td class="dep-name">org.clojure/tools.nrepl</td><td class="dotted"><hr /></td><td class="dep-version">0.2.5</td></tr><tr><td class="dep-name">org.clojure/data.json</td><td class="dotted"><hr /></td><td class="dep-version">0.2.5</td></tr><tr><td class="dep-name">org.clojure/core.async</td><td class="dotted"><hr /></td><td class="dep-version">0.1.346.0-17112a-alpha</td></tr><tr><td class="dep-name">asmdex/asmdex</td><td class="dotted"><hr /></td><td class="dep-version">1.0</td></tr><tr><td class="dep-name">soot/soot</td><td class="dotted"><hr /></td><td class="dep-version">1.0</td></tr><tr><td class="dep-name">pandect</td><td class="dotted"><hr /></td><td class="dep-version">0.4.1</td></tr><tr><td class="dep-name">commons-io/commons-io</td><td class="dotted"><hr /></td><td class="dep-version">2.4</td></tr><tr><td class="dep-name">incanter/incanter-core</td><td class="dotted"><hr /></td><td class="dep-version">1.5.6</td></tr><tr><td class="dep-name">me.raynes/fs</td><td class="dotted"><hr /></td><td class="dep-version">1.4.6</td></tr><tr><td class="dep-name">com.taoensso/nippy</td><td class="dotted"><hr /></td><td class="dep-version">2.7.1</td></tr><tr><td class="dep-name">clojurewerkz/neocons</td><td class="dotted"><hr /></td><td class="dep-version">3.0.0</td></tr></table></div></td><td class="codes" style="text-align: center; vertical-align: middle;color: #666;padding-right:20px"><br /><br /><br />(this space intentionally left almost blank)</td></tr><tr><td class="docs"><div class="toc"><a name="toc"><h3>namespaces</h3></a><ul><li><a href="#woa.apk.aapt.parse">woa.apk.aapt.parse</a></li><li><a href="#woa.apk.dex.asmdex.opcodes">woa.apk.dex.asmdex.opcodes</a></li><li><a href="#woa.apk.dex.asmdex.parse">woa.apk.dex.asmdex.parse</a></li><li><a href="#woa.apk.dex.asmdex.util">woa.apk.dex.asmdex.util</a></li><li><a href="#woa.apk.dex.parse">woa.apk.dex.parse</a></li><li><a href="#woa.apk.dex.soot.parse">woa.apk.dex.soot.parse</a></li><li><a href="#woa.apk.dex.soot.sexp">woa.apk.dex.soot.sexp</a></li><li><a href="#woa.apk.dex.soot.simulator">woa.apk.dex.soot.simulator</a></li><li><a href="#woa.apk.dex.soot.util">woa.apk.dex.soot.util</a></li><li><a href="#woa.apk.parse">woa.apk.parse</a></li><li><a href="#woa.apk.util">woa.apk.util</a></li><li><a href="#woa.core">woa.core</a></li><li><a href="#woa.core.invoke-path">woa.core.invoke-path</a></li><li><a href="#woa.core.signature">woa.core.signature</a></li><li><a href="#woa.neo4j.core">woa.neo4j.core</a></li><li><a href="#woa.neo4j.recipe">woa.neo4j.recipe</a></li><li><a href="#woa.util">woa.util</a></li><li><a href="#woa.virustotal.core">woa.virustotal.core</a></li></ul></div></td><td class="codes">&nbsp;</td></tr><tr><td class="docs"><div class="docs-header"><a class="anchor" href="#woa.apk.aapt.parse" name="woa.apk.aapt.parse"><h1 class="project-name">woa.apk.aapt.parse</h1><a class="toc-link" href="#toc">toc</a></a></div></td><td class="codes" /></tr><tr><td class="docs">
 </td><td class="codes"><pre class="brush: clojure">(ns woa.apk.aapt.parse
   ;; internal libs
   ;; common libs
@@ -4134,8 +4134,7 @@ spec\s+resource\s+
   (ConstantSexp. const))</pre></td></tr><tr><td class="spacer docs">&nbsp;</td><td class="codes" /></tr><tr><td class="docs"><div class="docs-header"><a class="anchor" href="#woa.apk.dex.soot.simulator" name="woa.apk.dex.soot.simulator"><h1 class="project-name">woa.apk.dex.soot.simulator</h1><a class="toc-link" href="#toc">toc</a></a></div></td><td class="codes" /></tr><tr><td class="docs">
 </td><td class="codes"><pre class="brush: clojure">(ns woa.apk.dex.soot.simulator
   ;; internal libs
-  (:require [woa.util
-             :refer [print-stack-trace-if-verbose]])   
+  (:use woa.util)   
   (:use woa.apk.dex.soot.util)
   (:use woa.apk.dex.soot.sexp)
   ;; common libs
@@ -5611,8 +5610,7 @@ spec\s+resource\s+
    &quot;java.util.WeakHashMap&quot; :all})</pre></td></tr><tr><td class="spacer docs">&nbsp;</td><td class="codes" /></tr><tr><td class="docs"><div class="docs-header"><a class="anchor" href="#woa.apk.dex.soot.util" name="woa.apk.dex.soot.util"><h1 class="project-name">woa.apk.dex.soot.util</h1><a class="toc-link" href="#toc">toc</a></a></div></td><td class="codes" /></tr><tr><td class="docs">
 </td><td class="codes"><pre class="brush: clojure">(ns woa.apk.dex.soot.util
   ;; internal libs
-  (:require [woa.util
-             :refer [print-stack-trace-if-verbose]])
+  (:use woa.util)
   ;; common libs
   (:require [clojure.string :as str]
             [clojure.set :as set]
@@ -5636,8 +5634,7 @@ spec\s+resource\s+
    (soot.options Options)
    (soot.jimple Stmt)))</pre></td></tr><tr><td class="docs"><p>declaration</p>
 </td><td class="codes"></td></tr><tr><td class="docs">
-</td><td class="codes"><pre class="brush: clojure">(declare process-worklist)
-(declare soot-queryable?)
+</td><td class="codes"><pre class="brush: clojure">(declare soot-queryable?)
 (declare find-method-candidates)
 (declare get-application-classes get-application-methods)
 (declare get-method-body map-class-bodies run-body-packs)
@@ -5650,15 +5647,7 @@ spec\s+resource\s+
 (declare android-api?)
 (declare with-soot new-g-objgetter)
 (declare mute unmute with-silence)</pre></td></tr><tr><td class="docs"><p>implementation</p>
-</td><td class="codes"></td></tr><tr><td class="docs"><p>common code patterns</p>
-</td><td class="codes"></td></tr><tr><td class="docs"><p>process worklist until it is empty</p>
-
-<p>process takes a worklist as input, and outputs the new worklist</p>
-</td><td class="codes"><pre class="brush: clojure">(defn process-worklist
-  [initial-worklist process]
-  (loop [worklist initial-worklist]
-    (when-not (empty? worklist)
-      (recur (process worklist)))))</pre></td></tr><tr><td class="docs"><p>SootQuery</p>
+</td><td class="codes"></td></tr><tr><td class="docs"><p>SootQuery</p>
 </td><td class="codes"></td></tr><tr><td class="docs">
 </td><td class="codes"><pre class="brush: clojure">(defprotocol SootQuery
   (get-soot-class [this])
@@ -6128,6 +6117,9 @@ spec\s+resource\s+
   ;; internal libs
   (:require [woa.util
              :refer [print-stack-trace-if-verbose]]
+            [woa.core.signature
+             :refer [compute-cgdfd-signature
+                     compute-cgdfd]]
             [woa.apk.parse
              :as apk-parse]
             [woa.apk.aapt.parse
@@ -6239,6 +6231,8 @@ spec\s+resource\s+
    [&quot;-n&quot; &quot;--neo4j-task-populate&quot; &quot;populate Neo4j with APK model&quot;]
    [&quot;-t&quot; &quot;--neo4j-task-tag&quot; &quot;tag Neo4j Apk nodes with labels&quot;]
    [&quot;-T&quot; &quot;--neo4j-task-untag&quot; &quot;untag Neo4j Apk nodes with labels&quot;]
+   [&quot;-g&quot; &quot;--neo4j-task-add-callback-signature&quot; &quot;add Neo4j CallbackSignature nodes&quot;]
+   [&quot;-G&quot; &quot;--neo4j-task-remove-callback-signature&quot; &quot;remove Neo4j CallbackSignature nodes&quot;]   
    [nil &quot;--neo4j-include-methodinstance&quot; &quot;include MethodInstance in the WoA model&quot;]
    [nil &quot;--neo4j-no-callgraph&quot; &quot;not include call graph (CG) in the WoA model&quot;]   
    [&quot;-D&quot; &quot;--neo4j-dump-model-batch-csv PREFIX&quot; &quot;dump Neo4j batch import CSV files to PREFIX; ref: https://github.com/jexp/batch-import/tree/2.1&quot;]
@@ -6263,6 +6257,7 @@ spec\s+resource\s+
            dump-model overwrite-model readable-model
            neo4j-port neo4j-protocol
            neo4j-task-populate neo4j-task-tag neo4j-task-untag
+           neo4j-task-add-callback-signature neo4j-task-remove-callback-signature
            dump-manifest]
     :as options}]
   (when (and file-path (fs/readable? file-path))
@@ -6304,19 +6299,24 @@ spec\s+resource\s+
                       (print-stack-trace-if-verbose e verbose))))
                 (when neo4j-task-populate
                   (neo4j/populate-from-parsed-apk apk
-                                                  options))))))
-        (when (or neo4j-task-tag neo4j-task-untag)
-          (when (and verbose (&gt; verbose 1))
-            (with-mutex-locked
-              (println &quot;Neo4j:&quot; (cond
-                                  neo4j-task-tag &quot;tag&quot;
-                                  neo4j-task-untag &quot;untag&quot;)
-                       file-path
-                       (pr-str tags))))
-          (let [apk (apk-parse/parse-apk file-path)]
-            (cond
-              neo4j-task-tag (neo4j/tag-apk apk tags options)
-              neo4j-task-untag (neo4j/untag-apk apk tags options))))
+                                                  options))
+                (cond
+                  neo4j-task-add-callback-signature
+                  (try
+                    (neo4j/add-callback-signature apk
+                                                  options)
+                    (catch Exception e
+                      (print-stack-trace-if-verbose e verbose)))
+                  neo4j-task-remove-callback-signature
+                  (try
+                    (neo4j/remove-callback-signature apk
+                                                     options)
+                    (catch Exception e
+                      (print-stack-trace-if-verbose e verbose))))))))
+        (let [apk (apk-parse/parse-apk file-path)]
+          (cond
+            neo4j-task-tag (neo4j/tag-apk apk tags options)
+            neo4j-task-untag (neo4j/untag-apk apk tags options)))        
         (when (and verbose (&gt; verbose 0))
           (with-mutex-locked
             (swap! completed-task-counter inc)
@@ -6339,6 +6339,7 @@ spec\s+resource\s+
                 load-model dump-model convert-model println-model pprint-model
                 readable-model
                 neo4j-task-populate
+                neo4j-task-add-callback-signature neo4j-task-remove-callback-signature
                 neo4j-dump-model-batch-csv]} options]
     (try
       ;; print out error messages if any
@@ -6494,6 +6495,19 @@ spec\s+resource\s+
                                 (neo4j/populate-from-parsed-apk apk
                                                                 options)
                                 (catch Exception e
+                                  (print-stack-trace-if-verbose e verbose))))
+                            (cond
+                              neo4j-task-add-callback-signature
+                              (try
+                                (neo4j/add-callback-signature apk
+                                                              options)
+                                (catch Exception e
+                                  (print-stack-trace-if-verbose e verbose)))
+                              neo4j-task-remove-callback-signature
+                              (try
+                                (neo4j/remove-callback-signature apk
+                                                                 options)
+                                (catch Exception e
                                   (print-stack-trace-if-verbose e verbose)))))
                           (recur (read-line))))))))
               (when neo4j-dump-model-batch-csv
@@ -6538,11 +6552,117 @@ spec\s+resource\s+
         (when (&gt; verbose 1)
           (with-mutex-locked
             (println &quot;shutting down&quot;)))
-        (System/exit 0)))))</pre></td></tr><tr><td class="spacer docs">&nbsp;</td><td class="codes" /></tr><tr><td class="docs"><div class="docs-header"><a class="anchor" href="#woa.neo4j.core" name="woa.neo4j.core"><h1 class="project-name">woa.neo4j.core</h1><a class="toc-link" href="#toc">toc</a></a></div></td><td class="codes" /></tr><tr><td class="docs">
+        (System/exit 0)))))</pre></td></tr><tr><td class="spacer docs">&nbsp;</td><td class="codes" /></tr><tr><td class="docs"><div class="docs-header"><a class="anchor" href="#woa.core.invoke-path" name="woa.core.invoke-path"><h1 class="project-name">woa.core.invoke-path</h1><a class="toc-link" href="#toc">toc</a></a></div></td><td class="codes" /></tr><tr><td class="docs">
+</td><td class="codes"><pre class="brush: clojure">(ns woa.core.invoke-path
+  ;; internal libs
+  (:use woa.util)
+  ;; common libs
+  (:require [clojure.string :as str]
+            [clojure.set :as set]
+            [clojure.walk :as walk]
+            [clojure.zip :as zip]
+            [clojure.java.io :as io]
+            [clojure.pprint :refer [pprint print-table]]
+            [clojure.stacktrace :refer [print-stack-trace]])
+  ;; special libs)</pre></td></tr><tr><td class="docs"><p>declaration</p>
+</td><td class="codes"></td></tr><tr><td class="docs">
+</td><td class="codes"><pre class="brush: clojure">(declare invoke-path-get-invocatee-map
+         invoke-path-get-node
+         invoke-path-get-descendants
+         invoke-path-get-node-name)</pre></td></tr><tr><td class="docs"><p>implementation</p>
+</td><td class="codes"></td></tr><tr><td class="docs"><p>invocatee map is a map from nodes to their invocatees</p>
+</td><td class="codes"><pre class="brush: clojure">(defn invoke-path-get-invocatee-map
+  [invoke-paths]
+  (let [invocatees (atom {})]
+    (process-worklist
+     #{invoke-paths}
+     (fn [worklist]
+       (let [new-worklist (atom #{})]
+         (dorun
+          (for [work worklist]
+            (let [node (invoke-path-get-node work)
+                  descendants (invoke-path-get-descendants work)
+                  children (map invoke-path-get-node descendants)]
+              (swap! invocatees update-in [node]
+                     #(-&gt;&gt; (into %1 %2) set)
+                     children)
+              (swap! new-worklist into descendants))))
+         @new-worklist)))
+    @invocatees))</pre></td></tr><tr><td class="docs">
+</td><td class="codes"><pre class="brush: clojure">(defn invoke-path-get-node [invoke-paths]
+  (cond
+    (map? invoke-paths) (-&gt;&gt; invoke-paths keys first)
+    :otherwise invoke-paths))</pre></td></tr><tr><td class="docs">
+</td><td class="codes"><pre class="brush: clojure">(defn invoke-path-get-descendants [invoke-paths]
+  (cond
+    (map? invoke-paths) (-&gt;&gt; invoke-paths vals first)
+    :otherwise nil))</pre></td></tr><tr><td class="docs">
+</td><td class="codes"><pre class="brush: clojure">(defn invoke-path-get-node-name [node]
+  (cond
+    ;; Soot signature format
+    (re-matches #&quot;&lt;[^&gt;]+&gt;&quot; node)
+    (let [[_ class method]
+          (re-find #&quot;^&lt;([^:]+):\s+\S+\s+([^(]+)\(&quot;
+                   node)]
+      (str class &quot;.&quot; method))
+    (re-matches #&quot;[^&lt;]+\[.+\]&quot; node)
+    (let [[_ classmethod]
+          (re-find #&quot;^(.+)\[&quot; node)]
+      classmethod)
+    :otherwise
+    node))</pre></td></tr><tr><td class="spacer docs">&nbsp;</td><td class="codes" /></tr><tr><td class="docs"><div class="docs-header"><a class="anchor" href="#woa.core.signature" name="woa.core.signature"><h1 class="project-name">woa.core.signature</h1><a class="toc-link" href="#toc">toc</a></a></div></td><td class="codes" /></tr><tr><td class="docs">
+</td><td class="codes"><pre class="brush: clojure">(ns woa.core.signature
+  ;; internal libs
+  (:use woa.util)
+  (:use woa.core.invoke-path)
+  ;; common libs
+  (:require [clojure.string :as str]
+            [clojure.set :as set]
+            [clojure.walk :as walk]
+            [clojure.zip :as zip]
+            [clojure.java.io :as io]
+            [clojure.pprint :refer [pprint print-table]]
+            [clojure.stacktrace :refer [print-stack-trace]])
+  ;; special libs
+  (:require [incanter.stats :as stats]))</pre></td></tr><tr><td class="docs"><p>declaration</p>
+</td><td class="codes"></td></tr><tr><td class="docs">
+</td><td class="codes"><pre class="brush: clojure">(declare compute-cgdfd-signature compute-cgdfd)</pre></td></tr><tr><td class="docs"><p>implementation</p>
+</td><td class="codes"></td></tr><tr><td class="docs"><p>compute the CGDFD-based signature from the input CGDFD (replace NaN with 0)</p>
+</td><td class="codes"><pre class="brush: clojure">(defn compute-cgdfd-signature
+  [cgdfd]
+  (try
+    (let [cgdfd (mapcat #(let [[out-degree multiplicity] %]
+                           (repeat multiplicity out-degree))
+                        cgdfd)]
+      ;; filter on NaN
+      (-&gt;&gt; [(stats/mean cgdfd)
+            (stats/sd cgdfd)
+            (stats/skewness cgdfd)
+            (stats/kurtosis cgdfd)]
+           (map #(let [n %]
+                   (cond
+                     (.isNaN n) 0
+                     :otherwise n)))
+           vec))
+    (catch Exception e
+      (print-stack-trace e)
+      nil)))</pre></td></tr><tr><td class="docs"><p>compute CGDFD (Call Graph Degree Frequency Distribution) from the input invoke-paths that represent the CG (Call Graph)</p>
+</td><td class="codes"><pre class="brush: clojure">(defn compute-cgdfd
+  [invoke-paths]
+  (let [invocatees (invoke-path-get-invocatee-map invoke-paths)
+        cgdfd (atom {})]
+    (doseq [[_ invocatees] invocatees]
+      (swap! cgdfd update-in [(count invocatees)]
+             #(let [now %]
+                (cond
+                  (nil? now) 1
+                  :otherwise (inc now)))))
+    @cgdfd))</pre></td></tr><tr><td class="spacer docs">&nbsp;</td><td class="codes" /></tr><tr><td class="docs"><div class="docs-header"><a class="anchor" href="#woa.neo4j.core" name="woa.neo4j.core"><h1 class="project-name">woa.neo4j.core</h1><a class="toc-link" href="#toc">toc</a></a></div></td><td class="codes" /></tr><tr><td class="docs">
 </td><td class="codes"><pre class="brush: clojure">(ns woa.neo4j.core
   ;; internal libs
-  (:require [woa.util
-             :refer [print-stack-trace-if-verbose]])  
+  (:use woa.util)
+  (:use (woa.core invoke-path
+                  signature))
   ;; common libs
   (:require [clojure.string :as str]
             [clojure.set :as set]
@@ -6557,6 +6677,7 @@ spec\s+resource\s+
 </td><td class="codes"><pre class="brush: clojure">(declare populate-from-parsed-apk
          add-to-batch-csv dump-batch-csv
          tag-apk untag-apk
+         add-callback-signature remove-callback-signature
          create-index mark-android-api
          connect android-api?)</pre></td></tr><tr><td class="docs">
 </td><td class="codes"><pre class="brush: clojure">(def defaults (atom {:neo4j-port 7474
@@ -6747,63 +6868,42 @@ spec\s+resource\s+
                                      (merge-rel invoke [[&quot;DESCEND&quot;] nil] api))))))))
                          (when-not neo4j-no-callgraph
                            (let [path (conj path :invoke-paths)
-                                 invoke-paths (get-in the-dex path)
-                                 get-node (fn [invoke-paths]
-                                            (cond
-                                              (map? invoke-paths) (-&gt;&gt; invoke-paths keys first)
-                                              :otherwise invoke-paths))
-                                 get-descendants (fn [invoke-paths]
-                                                   (cond
-                                                     (map? invoke-paths) (-&gt;&gt; invoke-paths vals first)
-                                                     :otherwise nil))
-                                 get-node-name (fn [node]
-                                                 (cond
-                                                   ;; Soot signature format
-                                                   (re-matches #&quot;&lt;[^&gt;]+&gt;&quot; node)
-                                                   (let [[_ class method]
-                                                         (re-find #&quot;^&lt;([^:]+):\s+\S+\s+([^(]+)\(&quot;
-                                                                  node)]
-                                                     (str class &quot;.&quot; method))
-                                                   (re-matches #&quot;[^&lt;]+\[.+\]&quot; node)
-                                                   (let [[_ classmethod]
-                                                         (re-find #&quot;^(.+)\[&quot; node)]
-                                                     classmethod)
-                                                   :otherwise
-                                                   node))]
+                                 invoke-paths (get-in the-dex path)]
                              (when invoke-paths
                                ;; link the root node to the Callback and the Dex
-                               (let [first-node (get-node invoke-paths)
+                               (let [root-node (invoke-path-get-node invoke-paths)
                                      node [[&quot;CallGraphNode&quot;]
-                                           {&quot;name&quot; (get-node-name first-node)
-                                            &quot;signature&quot; first-node
+                                           {&quot;name&quot; (invoke-path-get-node-name root-node)
+                                            &quot;signature&quot; root-node
                                             &quot;dex&quot; dex-sha256}]]
                                  (merge-node node)
                                  (merge-rel dex [[&quot;CALLGRAPH&quot;] nil] node)
                                  (merge-rel callback [[&quot;CALLGRAPH&quot;] nil] node))
                                ;; iteratively link descendants
-                               (loop [worklist #{invoke-paths}]
-                                 (when-not (empty? worklist)
-                                   (let [new-worklist (atom #{})]
-                                     (dorun
-                                      (for [work worklist]
-                                        (let [node (get-node work)
-                                              descendants (get-descendants work)
-                                              children (map get-node descendants)
-                                              parent-node [[&quot;CallGraphNode&quot;]
-                                                           {&quot;name&quot; (get-node-name node)
-                                                            &quot;signature&quot; node
-                                                            &quot;dex&quot; dex-sha256}]]
-                                          (merge-node parent-node)
-                                          (dorun
-                                           (for [child children]
-                                             (let [child-node [[&quot;CallGraphNode&quot;]
-                                                               {&quot;name&quot; (get-node-name child)
-                                                                &quot;signature&quot; child
-                                                                &quot;dex&quot; dex-sha256}]]
-                                               (merge-node child-node)
-                                               (merge-rel parent-node [[&quot;INVOKE&quot;] nil] child-node))))
-                                          (swap! new-worklist into descendants))))
-                                     (recur @new-worklist)))))))                         )))))))))))
+                               (process-worklist
+                                #{invoke-paths}
+                                (fn [worklist]
+                                  (let [new-worklist (atom #{})]
+                                    (dorun
+                                     (for [work worklist]
+                                       (let [node (invoke-path-get-node work)
+                                             descendants (invoke-path-get-descendants work)
+                                             children (map invoke-path-get-node descendants)
+                                             parent-node [[&quot;CallGraphNode&quot;]
+                                                          {&quot;name&quot; (invoke-path-get-node-name node)
+                                                           &quot;signature&quot; node
+                                                           &quot;dex&quot; dex-sha256}]]
+                                         (merge-node parent-node)
+                                         (dorun
+                                          (for [child children]
+                                            (let [child-node [[&quot;CallGraphNode&quot;]
+                                                              {&quot;name&quot; (invoke-path-get-node-name child)
+                                                               &quot;signature&quot; child
+                                                               &quot;dex&quot; dex-sha256}]]
+                                              (merge-node child-node)
+                                              (merge-rel parent-node [[&quot;INVOKE&quot;] nil] child-node))))
+                                         (swap! new-worklist into descendants))))
+                                    @new-worklist)))))))))))))))))
       ;; app components
       (doseq [comp-type [:activity :service :receiver]]
         (doseq [[comp-name {:keys [intent-filter-action
@@ -7104,30 +7204,8 @@ spec\s+resource\s+
                                                     :invokename (str invoke-class-name &quot;.&quot; invoke-name)}))))))))))
                         (when-not neo4j-no-callgraph
                           (let [path (conj path :invoke-paths)
-                                invoke-paths (get-in dex path)
-                                get-node (fn [invoke-paths]
-                                           (cond
-                                             (map? invoke-paths) (-&gt;&gt; invoke-paths keys first)
-                                             :otherwise invoke-paths))
-                                get-descendants (fn [invoke-paths]
-                                                  (cond
-                                                    (map? invoke-paths) (-&gt;&gt; invoke-paths vals first)
-                                                    :otherwise nil))
-                                get-node-name (fn [node]
-                                                (cond
-                                                  ;; Soot signature format
-                                                  (re-matches #&quot;&lt;[^&gt;]+&gt;&quot; node)
-                                                  (let [[_ class method]
-                                                        (re-find #&quot;^&lt;([^:]+):\s+\S+\s+([^(]+)\(&quot;
-                                                                 node)]
-                                                    (str class &quot;.&quot; method))
-                                                  (re-matches #&quot;[^&lt;]+\[.+\]&quot; node)
-                                                  (let [[_ classmethod]
-                                                        (re-find #&quot;^(.+)\[&quot; node)]
-                                                    classmethod)
-                                                  :otherwise
-                                                  node))]
-                            (when-let [first-node (get-node invoke-paths)]
+                                invoke-paths (get-in dex path)]
+                            (when-let [root-node (invoke-path-get-node invoke-paths)]
                               ;; link the root node to the Callback and the Dex
                               (swap! result conj
                                      (ntx/statement
@@ -7137,35 +7215,36 @@ spec\s+resource\s+
                                                  &quot;MERGE (cgnode:CallGraphNode {name:{name},dex:{dexsha256},signature:{signature}})&quot;
                                                  &quot;MERGE (dex)-[:CALLGRAPH]-&gt;(cgnode)&lt;-[:CALLGRAPH]-(callback)&quot;])
                                       {:dexsha256 dex-sha256
-                                       :name (get-node-name first-node)
-                                       :signature first-node
+                                       :name (invoke-path-get-node-name root-node)
+                                       :signature root-node
                                        :callbackname (str class-name &quot;.&quot; callback-name)})))
-                            (loop [worklist #{invoke-paths}]
-                              (when-not (empty? worklist)
-                                (let [new-worklist (atom #{})]
-                                  (dorun
-                                   (for [work worklist]
-                                     (let [node (get-node work)
-                                           descendants (get-descendants work)
-                                           children (map get-node descendants)]
-                                       (swap! result conj
-                                              (ntx/statement
-                                               (str/join &quot; &quot;
-                                                         [&quot;MERGE (node:CallGraphNode {name:{name},dex:{dexsha256},signature:{signature}})&quot;
-                                                          &quot;FOREACH (&quot;
-                                                          &quot;child in {children} |&quot;
-                                                          &quot;  MERGE (childnode:CallGraphNode {name:child.name,signature:child.signature,dex:{dexsha256}})&quot;
-                                                          &quot;  MERGE (node)-[:INVOKE]-&gt;(childnode)&quot;
-                                                          &quot;)&quot;])
-                                               {:dexsha256 dex-sha256
-                                                :name (get-node-name node)
-                                                :signature node
-                                                :children (map #(let [node %]
-                                                                  {:name (get-node-name node)
-                                                                   :signature node})
-                                                               children)}))
-                                       (swap! new-worklist into descendants))))
-                                  (recur @new-worklist)))))))))))))))         
+                            (process-worklist
+                             #{invoke-paths}
+                             (fn [worklist]
+                               (let [new-worklist (atom #{})]
+                                 (dorun
+                                  (for [work worklist]
+                                    (let [node (invoke-path-get-node work)
+                                          descendants (invoke-path-get-descendants work)
+                                          children (map invoke-path-get-node descendants)]
+                                      (swap! result conj
+                                             (ntx/statement
+                                              (str/join &quot; &quot;
+                                                        [&quot;MERGE (node:CallGraphNode {name:{name},dex:{dexsha256},signature:{signature}})&quot;
+                                                         &quot;FOREACH (&quot;
+                                                         &quot;child in {children} |&quot;
+                                                         &quot;  MERGE (childnode:CallGraphNode {name:child.name,signature:child.signature,dex:{dexsha256}})&quot;
+                                                         &quot;  MERGE (node)-[:INVOKE]-&gt;(childnode)&quot;
+                                                         &quot;)&quot;])
+                                              {:dexsha256 dex-sha256
+                                               :name (invoke-path-get-node-name node)
+                                               :signature node
+                                               :children (map #(let [node %]
+                                                                 {:name (invoke-path-get-node-name node)
+                                                                  :signature node})
+                                                              children)}))
+                                      (swap! new-worklist into descendants))))
+                                 @new-worklist))))))))))))))         
          @result))
       ;; app components
       (ntx/execute
@@ -7204,7 +7283,9 @@ spec\s+resource\s+
                         :intentfiltercategory intent-filter-category})))))         
          @result))
       ;; any more query within the transaction?)))</pre></td></tr><tr><td class="docs"><p>tag an existing Apk node with the tagsuntag an existing Apk node with the tags</p>
-</td><td class="codes"><pre class="brush: clojure">(let [common (fn [apk tags options op]
+</td><td class="codes"><pre class="brush: clojure">(let [common (fn [apk tags
+                  {:keys [verbose] :as options}
+                  op]
                (when-not (empty? tags)
                  (let [statements (atom [])
                        apk-sha256 (:sha256 apk)]
@@ -7233,7 +7314,7 @@ spec\s+resource\s+
                      (try
                        (ntx/commit conn transaction @statements)
                        (catch Exception e
-                         (print-stack-trace e)))))))]
+                         (print-stack-trace-if-verbose e verbose)))))))]
   (defn tag-apk
   [apk tags
    {:keys [] :as options}]
@@ -7241,7 +7322,73 @@ spec\s+resource\s+
   (defn untag-apk
   [apk tags
    {:keys [] :as options}]
-  (common apk tags options :untag)))</pre></td></tr><tr><td class="docs"><p>create index</p>
+  (common apk tags options :untag)))</pre></td></tr><tr><td class="docs"><p>add component callback signature</p>
+</td><td class="codes"><pre class="brush: clojure">(defn add-callback-signature
+  [apk
+   {:keys [verbose] :as options}]
+  (let [apk-sha256 (:sha256 apk)
+        the-dex (:dex apk)]
+    (dorun
+     (for [comp-package-name (-&gt;&gt; the-dex keys)]
+       (do
+         (dorun
+          (for [comp-class-name (-&gt;&gt; (get-in the-dex
+                                             [comp-package-name])
+                                     keys)]
+            (do
+              (let [{:keys [android-api-ancestors callbacks]}
+                    (-&gt;&gt; (get-in the-dex
+                                 [comp-package-name
+                                  comp-class-name]))]
+                (dorun
+                 (for [callback-name (-&gt;&gt; callbacks keys)]
+                   (do
+                     (let [path [comp-package-name
+                                 comp-class-name
+                                 :callbacks
+                                 callback-name]]
+                       (let [path (conj path :invoke-paths)
+                             invoke-paths (get-in the-dex path)
+                             cgdfd (compute-cgdfd invoke-paths)
+                             signature (compute-cgdfd-signature cgdfd)]
+                         (when signature
+                           (let [statements (atom [])]
+                             (swap! statements conj
+                                    (ntx/statement
+                                     (str/join &quot; &quot;
+                                               [&quot;MATCH (a:Apk {sha256:{apksha256}})&quot;
+                                                &quot;MATCH (cb:Callback {name:{callbackname}})&quot;
+                                                &quot;MERGE (sig:CallbackSignature {name:{callbackname},apk:{apksha256}})&quot;
+                                                &quot;MERGE (a)-[:CALLBACK_SIGNATURE]-&gt;(sig)&lt;-[:CALLBACK_SIGNATURE]-(cb)&quot;
+                                                &quot;SET sig.signature={signature}&quot;])
+                                     {:apksha256 apk-sha256
+                                      :callbackname (str comp-class-name &quot;.&quot; callback-name)
+                                      :signature signature}))
+                             (let [conn (connect options)
+                                   transaction (ntx/begin-tx conn)]
+                               (try
+                                 (ntx/commit conn transaction @statements)
+                                 (catch Exception e
+                                   (print-stack-trace-if-verbose e verbose))))))))))))))))))))</pre></td></tr><tr><td class="docs"><p>remove component callback signature</p>
+</td><td class="codes"><pre class="brush: clojure">(defn remove-callback-signature
+  [apk
+   {:keys [verbose] :as options}]
+  (let [apk-sha256 (:sha256 apk)]
+    (let [statements (atom [])]
+      (swap! statements conj
+             (ntx/statement
+              (str/join &quot; &quot;
+                        [&quot;MATCH (a:Apk {sha256:{apksha256}})-[:CALLBACK_SIGNATURE]-&gt;(sig:CallbackSignature)&quot;
+                         &quot;WITH sig&quot;
+                         &quot;MATCH (sig)&lt;-[e:CALLBACK_SIGNATURE]-()&quot;
+                         &quot;DELETE sig, e&quot;])
+              {:apksha256 apk-sha256}))
+      (let [conn (connect options)
+            transaction (ntx/begin-tx conn)]
+        (try
+          (ntx/commit conn transaction @statements)
+          (catch Exception e
+            (print-stack-trace-if-verbose e verbose)))))))</pre></td></tr><tr><td class="docs"><p>create index</p>
 </td><td class="codes"><pre class="brush: clojure">(defn create-index
   [{:keys []
     :as options}]
@@ -7266,7 +7413,9 @@ spec\s+resource\s+
                               [&quot;AndroidAPI&quot; &quot;name&quot;]
                               [&quot;Tag&quot; &quot;id&quot;]
                               [&quot;CallGraphNode&quot; &quot;name&quot;]
-                              [&quot;CallGraphNode&quot; &quot;dex&quot;]]))]
+                              [&quot;CallGraphNode&quot; &quot;dex&quot;]
+                              [&quot;CallbackSignature&quot; &quot;apk&quot;]
+                              [&quot;CallbackSignature&quot; &quot;name&quot;]]))]
     (let [conn (connect options)
           transaction (ntx/begin-tx conn)]
       (ntx/commit conn transaction statements))))</pre></td></tr><tr><td class="docs"><p>label =~'^(?:com.)?android' nodes as AndroidAPI; should be infrequently used</p>
@@ -7386,8 +7535,16 @@ spec\s+resource\s+
             [clojure.stacktrace :refer [print-stack-trace]])
   ;; imports)</pre></td></tr><tr><td class="docs"><p>declaration</p>
 </td><td class="codes"></td></tr><tr><td class="docs">
-</td><td class="codes"><pre class="brush: clojure">(declare print-stack-trace-if-verbose)</pre></td></tr><tr><td class="docs"><p>implementation</p>
-</td><td class="codes"></td></tr><tr><td class="docs"><p>print-stack-trace Exception e to <em>err</em> if verbose is non-nil</p>
+</td><td class="codes"><pre class="brush: clojure">(declare process-worklist
+         print-stack-trace-if-verbose)</pre></td></tr><tr><td class="docs"><p>implementation</p>
+</td><td class="codes"></td></tr><tr><td class="docs"><p>process worklist until it is empty</p>
+
+<p>process takes a worklist as input, and outputs the new worklist</p>
+</td><td class="codes"><pre class="brush: clojure">(defn process-worklist
+  [initial-worklist process]
+  (loop [worklist initial-worklist]
+    (when-not (empty? worklist)
+      (recur (process worklist)))))</pre></td></tr><tr><td class="docs"><p>print-stack-trace Exception e to <em>err</em> if verbose is non-nil</p>
 </td><td class="codes"><pre class="brush: clojure">(defn print-stack-trace-if-verbose
   [^Exception e verbose &amp; [level]]
   (when (and verbose
@@ -7537,7 +7694,7 @@ spec\s+resource\s+
                    (str/replace &quot;_&quot; &quot;-&quot;)
                    keyword)
                v]))
-       (into {})))</pre></td></tr><tr><td class="spacer docs">&nbsp;</td><td class="codes" /></tr></table><div class="footer">Generated by <a href="https://github.com/gdeer81/marginalia">Marginalia</a>.&nbsp;&nbsp;Syntax highlighting provided by Alex Gorbatchev's <a href="http://alexgorbatchev.com/SyntaxHighlighter/">SyntaxHighlighter</a><div id="floating-toc"><ul><li class="floating-toc-li" id="floating-toc_woa.apk.aapt.parse">woa.apk.aapt.parse</li><li class="floating-toc-li" id="floating-toc_woa.apk.dex.asmdex.opcodes">woa.apk.dex.asmdex.opcodes</li><li class="floating-toc-li" id="floating-toc_woa.apk.dex.asmdex.parse">woa.apk.dex.asmdex.parse</li><li class="floating-toc-li" id="floating-toc_woa.apk.dex.asmdex.util">woa.apk.dex.asmdex.util</li><li class="floating-toc-li" id="floating-toc_woa.apk.dex.parse">woa.apk.dex.parse</li><li class="floating-toc-li" id="floating-toc_woa.apk.dex.soot.parse">woa.apk.dex.soot.parse</li><li class="floating-toc-li" id="floating-toc_woa.apk.dex.soot.sexp">woa.apk.dex.soot.sexp</li><li class="floating-toc-li" id="floating-toc_woa.apk.dex.soot.simulator">woa.apk.dex.soot.simulator</li><li class="floating-toc-li" id="floating-toc_woa.apk.dex.soot.util">woa.apk.dex.soot.util</li><li class="floating-toc-li" id="floating-toc_woa.apk.parse">woa.apk.parse</li><li class="floating-toc-li" id="floating-toc_woa.apk.util">woa.apk.util</li><li class="floating-toc-li" id="floating-toc_woa.core">woa.core</li><li class="floating-toc-li" id="floating-toc_woa.neo4j.core">woa.neo4j.core</li><li class="floating-toc-li" id="floating-toc_woa.neo4j.recipe">woa.neo4j.recipe</li><li class="floating-toc-li" id="floating-toc_woa.util">woa.util</li><li class="floating-toc-li" id="floating-toc_woa.virustotal.core">woa.virustotal.core</li></ul></div></div><script type="text/javascript">SyntaxHighlighter.defaults['gutter'] = false;
+       (into {})))</pre></td></tr><tr><td class="spacer docs">&nbsp;</td><td class="codes" /></tr></table><div class="footer">Generated by <a href="https://github.com/gdeer81/marginalia">Marginalia</a>.&nbsp;&nbsp;Syntax highlighting provided by Alex Gorbatchev's <a href="http://alexgorbatchev.com/SyntaxHighlighter/">SyntaxHighlighter</a><div id="floating-toc"><ul><li class="floating-toc-li" id="floating-toc_woa.apk.aapt.parse">woa.apk.aapt.parse</li><li class="floating-toc-li" id="floating-toc_woa.apk.dex.asmdex.opcodes">woa.apk.dex.asmdex.opcodes</li><li class="floating-toc-li" id="floating-toc_woa.apk.dex.asmdex.parse">woa.apk.dex.asmdex.parse</li><li class="floating-toc-li" id="floating-toc_woa.apk.dex.asmdex.util">woa.apk.dex.asmdex.util</li><li class="floating-toc-li" id="floating-toc_woa.apk.dex.parse">woa.apk.dex.parse</li><li class="floating-toc-li" id="floating-toc_woa.apk.dex.soot.parse">woa.apk.dex.soot.parse</li><li class="floating-toc-li" id="floating-toc_woa.apk.dex.soot.sexp">woa.apk.dex.soot.sexp</li><li class="floating-toc-li" id="floating-toc_woa.apk.dex.soot.simulator">woa.apk.dex.soot.simulator</li><li class="floating-toc-li" id="floating-toc_woa.apk.dex.soot.util">woa.apk.dex.soot.util</li><li class="floating-toc-li" id="floating-toc_woa.apk.parse">woa.apk.parse</li><li class="floating-toc-li" id="floating-toc_woa.apk.util">woa.apk.util</li><li class="floating-toc-li" id="floating-toc_woa.core">woa.core</li><li class="floating-toc-li" id="floating-toc_woa.core.invoke-path">woa.core.invoke-path</li><li class="floating-toc-li" id="floating-toc_woa.core.signature">woa.core.signature</li><li class="floating-toc-li" id="floating-toc_woa.neo4j.core">woa.neo4j.core</li><li class="floating-toc-li" id="floating-toc_woa.neo4j.recipe">woa.neo4j.recipe</li><li class="floating-toc-li" id="floating-toc_woa.util">woa.util</li><li class="floating-toc-li" id="floating-toc_woa.virustotal.core">woa.virustotal.core</li></ul></div></div><script type="text/javascript">SyntaxHighlighter.defaults['gutter'] = false;
 SyntaxHighlighter.all();
 
 // hackity hack

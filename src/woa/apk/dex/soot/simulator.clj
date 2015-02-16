@@ -1,7 +1,6 @@
 (ns woa.apk.dex.soot.simulator
   ;; internal libs
-  (:require [woa.util
-             :refer [print-stack-trace-if-verbose]])   
+  (:use woa.util)   
   (:use woa.apk.dex.soot.util)
   (:use woa.apk.dex.soot.sexp)
   ;; common libs

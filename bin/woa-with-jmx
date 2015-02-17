@@ -1,38 +1,51 @@
 #! /bin/bash
 # start-up script with JMX enabled
 # author: Wei Peng <write.to.peng.wei@gmail.com>
-# version: 20150215
+# version: 20150216
 # deps: wget
-
-WGET=${WGET:-'wget'}
-
-if [[ -n "${JVM_HEAP}" ]]; then
-  JVM_OPTS=${JVM_OPTS:-"-Xmx${JVM_HEAP} -Xms${JVM_HEAP}"}
-fi
 
 # http://stackoverflow.com/a/246128
 DIR=$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )
 
-URL_PREFIX='https://raw.githubusercontent.com/pw4ever/web-of-apks/gh-pages/bin/'
+WGET=${WGET:-'wget'}
+if [[ -n "${JVM_HEAP}" ]]; then
+  JVM_OPTS=${JVM_OPTS:-"-Xmx${JVM_HEAP} -Xms${JVM_HEAP}"}
+fi
+
+## resolve dependencies
 
 MAIN='woa'
 MAIN_EXEC="${DIR}/${MAIN}"
 
-declare -a content
-content=("${MAIN}")
+declare -a url_prefix content
+
+url_prefix=(
+'https://raw.githubusercontent.com/pw4ever/web-of-apks/gh-pages/bin/'
+)
+
+content=(
+"${MAIN}"
+)
 
 for index in $(seq 0 $(( ${#content[@]} - 1 ))) 
 do
-    "${WGET}" -nv -nc -nd -P "${DIR}" "${URL_PREFIX}${content[$index]}"
+  name=${content[$index]}
+  prefix=${url_prefix[$index]}
+  if ! [[ -f "${DIR}/${name}" ]]; then
+    "${WGET}" -nv -nc -nd -P "${DIR}" "${prefix}/${name}"
+  fi
 done
-chmod +x "${MAIN_EXEC}"
+
+## solve command-line parameter
 
 JMX_PORT=$1
 
+## do the real work
+
 # if the first argument is a number (for JMX port)
 if [ "${JMX_PORT}" -ge 0 ] 2> /dev/null; then
-    shift # remove JMX_PORT from the argument list
-    JVM_OPTS="${JVM_OPTS} -Dcom.sun.management.jmxremote -Dcom.sun.management.jmxremote.ssl=false -Dcom.sun.management.jmxremote.authenticate=false -Dcom.sun.management.jmxremote.port=${JMX_PORT}" "${MAIN_EXEC}" "$@"
+  shift # remove JMX_PORT from the argument list
+  JVM_OPTS="${JVM_OPTS} -Dcom.sun.management.jmxremote -Dcom.sun.management.jmxremote.ssl=false -Dcom.sun.management.jmxremote.authenticate=false -Dcom.sun.management.jmxremote.port=${JMX_PORT}" "${MAIN_EXEC}" "$@"
 else # if the first argument is not a port
-    "${MAIN_EXEC}" "$@"
+  "${MAIN_EXEC}" "$@"
 fi

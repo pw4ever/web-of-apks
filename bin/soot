@@ -1,8 +1,8 @@
 #! /bin/bash
-# start-up script
+# Soot (https://sable.github.io/soot/) start-up script
 # author: Wei Peng <write.to.peng.wei@gmail.com>
 # version: 20150216
-# deps: wget, java
+# deps: bash, GNU coreutils, wget, procps-ng
 
 # http://stackoverflow.com/a/246128
 DIR=$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )
@@ -10,25 +10,24 @@ DIR=$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )
 WGET=${WGET:-'wget'}
 JAVA=${JAVA:-'java'}
 
-JVM_HEAP=${JVM_HEAP:-'5g'}
+JVM_HEAP=${JVM_HEAP:-"2g"}
 JVM_OPTS=${JVM_OPTS:-"-Xmx${JVM_HEAP} -Xms${JVM_HEAP}"}
 JVM_MORE_OPTS=${JVM_MORE_OPTS:-""}
 
 ## resolve dependencies
 
-MAIN='woa.jar'
+MAIN='soot-trunk.jar'
 MAIN_JAR="${DIR}/${MAIN}"
 
 declare -a url_prefix content
 
 url_prefix=(
-'https://github.com/pw4ever/web-of-apks/releases/download/tryout/'
+#'https://ssebuild.cased.de/nightly/soot/lib/'
 'https://github.com/pw4ever/web-of-apks/releases/download/tryout/'
 )
 
 content=(
 "${MAIN}"
-'android.jar'
 )
 
 for index in $(seq 0 $(( ${#content[@]} - 1 ))) 

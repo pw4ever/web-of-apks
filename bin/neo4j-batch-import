@@ -3,17 +3,51 @@
 # upstream: https://github.com/jexp/batch-import/tree/2.1
 #
 # author: Wei Peng <write.to.peng.wei@gmail.com>
-# version: 20150211-1
+# version: 20150216
 # deps: wget, tar, java
+
+# http://stackoverflow.com/a/246128
+DIR=$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )
 
 WGET=${WGET:-'wget'}
 TAR=${TAR:-'tar'}
 JAVA=${JAVA:-'java'}
 
-# http://stackoverflow.com/a/246128
-DIR=$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )
+JVM_HEAP=${JVM_HEAP:-'5g'}
+JVM_OPTS=${JVM_OPTS:-"-Xmx${JVM_HEAP} -Xms${JVM_HEAP}"}
+JVM_MORE_OPTS=${JVM_MORE_OPTS:-""}
 
-# process
+## resolve dependencies
+
+LIB_DIR="${DIR}"/neo4j-batch-import-lib
+
+# fetch and setup dependencies if missing
+if ! [[ -d ${LIB_DIR} ]]; then
+  MAIN='neo4j-batch-import.tgz'
+
+  declare -a url_prefix content
+
+  url_prefix=(
+  'https://github.com/pw4ever/web-of-apks/releases/download/tryout/'
+  )
+
+  content=(
+  "${MAIN}"
+  )
+
+  for index in $(seq 0 $(( ${#content[@]} - 1 ))) 
+  do
+    name=${content[$index]}
+    prefix=${url_prefix[$index]}
+    if ! [[ -f "${DIR}/${name}" ]]; then
+      "${WGET}" -nv -nc -nd -P "${DIR}" "${prefix}/${name}"
+    fi
+  done
+
+  "${TAR}" xvfz "${DIR}/${MAIN}" -C "${DIR}"
+fi
+
+## process command-line arguments
 DB=${1:-graph.db}
 shift
 NODES=${1:-nodes.csv}
@@ -21,34 +55,12 @@ shift
 RELS=${1:-rels.csv}
 shift
 
-LIB_DIR="${DIR}"/neo4j-batch-import-lib
-
-# fetch and setup dependencies if missing
-if ! [[ -d ${LIB_DIR} ]]; then
-  URL_PREFIX='https://github.com/pw4ever/web-of-apks/releases/download/tryout/'
-
-  MAIN='neo4j-batch-import.tgz'
-
-  declare -a content
-  content=(${MAIN})
-
-  for index in $(seq 0 $(( ${#content[@]} - 1 ))) 
-  do
-    "${WGET}" -nv -nc -nd -P "${DIR}" "${URL_PREFIX}${content[$index]}"
-  done
-
-  "${TAR}" xvfz "${DIR}/${MAIN}" -C "${DIR}"
-fi
-
 # set up JVM classpath
 CP=""
 for i in ${LIB_DIR}/*.jar; do
   CP="$CP:$i"
 done
 
-# JVM options
-JVM_HEAP=${JVM_HEAP:-5g}
-JVM_OPTS=${JVM_OPTS:-"-Xmx${JVM_HEAP} -Xms${JVM_HEAP}"}
-JVM_MORE_OPTS=${JVM_MORE_OPTS:-""}
+## do the real work
 
 "${JAVA}" -classpath "${CP}" ${JVM_OPTS} ${JVM_MORE_OPTS} -Dfile.encoding=UTF-8 org.neo4j.batchimport.Importer batch.properties "$DB" "$NODES" "$RELS" "$@"

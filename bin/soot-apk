@@ -1,28 +1,22 @@
-#! /bin/bash
-# start-up script
+#!/bin/bash - 
+# Soot (https://sable.github.io/soot/) start-up script for APK analysis
 # author: Wei Peng <write.to.peng.wei@gmail.com>
 # version: 20150216
-# deps: wget, java
+# deps: bash, GNU coreutils, wget, procps-ng
 
 # http://stackoverflow.com/a/246128
 DIR=$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )
 
 WGET=${WGET:-'wget'}
-JAVA=${JAVA:-'java'}
-
-JVM_HEAP=${JVM_HEAP:-'5g'}
-JVM_OPTS=${JVM_OPTS:-"-Xmx${JVM_HEAP} -Xms${JVM_HEAP}"}
-JVM_MORE_OPTS=${JVM_MORE_OPTS:-""}
 
 ## resolve dependencies
 
-MAIN='woa.jar'
-MAIN_JAR="${DIR}/${MAIN}"
+MAIN='soot'
 
-declare -a url_prefix content
+declare -a url_prefix content 
 
 url_prefix=(
-'https://github.com/pw4ever/web-of-apks/releases/download/tryout/'
+'https://raw.githubusercontent.com/pw4ever/web-of-apks/gh-pages/bin/'
 'https://github.com/pw4ever/web-of-apks/releases/download/tryout/'
 )
 
@@ -40,6 +34,21 @@ do
   fi
 done
 
+## command line parsing
+
+apk=${1}
+
+if ! [[ -n "${apk}" ]]; then
+  echo "$0 <apk filename>" > /dev/stderr
+  exit 1
+fi
+
+out=$(basename $apk .apk)
+
+if [[ $out == $apk ]]; then
+  out="${out}-out"
+fi
+
 ## do the real work
 
-[ -f "${MAIN_JAR}" ] && "${JAVA}" ${JVM_OPTS} ${JVM_MORE_OPTS} -jar "${MAIN_JAR}" "$@"
+./${MAIN} -f J --src-prec apk --process-path "$apk" --force-android-jar "${DIR}/android.jar" --allow-phantom-refs -d ${out}

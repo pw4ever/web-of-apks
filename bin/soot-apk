@@ -51,4 +51,4 @@ fi
 
 ## do the real work
 
-./${MAIN} -f J --src-prec apk --process-path "$apk" --force-android-jar "${DIR}/android.jar" --allow-phantom-refs -d ${out}
+"${DIR}/${MAIN}" -f J --src-prec apk --process-path "$apk" --force-android-jar "${DIR}/android.jar" --allow-phantom-refs -d ${out}

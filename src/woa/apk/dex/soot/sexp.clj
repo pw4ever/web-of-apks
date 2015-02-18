@@ -174,3 +174,10 @@
 (defn make-constant-sexp
   [const]
   (ConstantSexp. const))
+
+(defrecord CastSexp [value cast-type]
+  Sexp)
+
+(defn make-cast-sexp
+  [value cast-type]
+  (CastSexp. value cast-type))

@@ -4131,7 +4131,12 @@ spec\s+resource\s+
   Sexp)</pre></td></tr><tr><td class="docs">
 </td><td class="codes"><pre class="brush: clojure">(defn make-constant-sexp
   [const]
-  (ConstantSexp. const))</pre></td></tr><tr><td class="spacer docs">&nbsp;</td><td class="codes" /></tr><tr><td class="docs"><div class="docs-header"><a class="anchor" href="#woa.apk.dex.soot.simulator" name="woa.apk.dex.soot.simulator"><h1 class="project-name">woa.apk.dex.soot.simulator</h1><a class="toc-link" href="#toc">toc</a></a></div></td><td class="codes" /></tr><tr><td class="docs">
+  (ConstantSexp. const))</pre></td></tr><tr><td class="docs">
+</td><td class="codes"><pre class="brush: clojure">(defrecord CastSexp [value cast-type]
+  Sexp)</pre></td></tr><tr><td class="docs">
+</td><td class="codes"><pre class="brush: clojure">(defn make-cast-sexp
+  [value cast-type]
+  (CastSexp. value cast-type))</pre></td></tr><tr><td class="spacer docs">&nbsp;</td><td class="codes" /></tr><tr><td class="docs"><div class="docs-header"><a class="anchor" href="#woa.apk.dex.soot.simulator" name="woa.apk.dex.soot.simulator"><h1 class="project-name">woa.apk.dex.soot.simulator</h1><a class="toc-link" href="#toc">toc</a></a></div></td><td class="codes" /></tr><tr><td class="docs">
 </td><td class="codes"><pre class="brush: clojure">(ns woa.apk.dex.soot.simulator
   ;; internal libs
   (:use woa.util)   
@@ -4279,9 +4284,7 @@ spec\s+resource\s+
           base-value (-&gt; base (simulator-resolve-value @simulator))
           index-value (-&gt; (.. field getIndex)
                           (simulator-resolve-value @simulator))]
-      (simulator-assign base
-                        (assoc base-value index-value value)
-                        simulator))))</pre></td></tr><tr><td class="docs"><p>get method interesting invokes and helpers</p>
+      (aset base-value index-value value))))</pre></td></tr><tr><td class="docs"><p>get method interesting invokes and helpers</p>
 </td><td class="codes"></td></tr><tr><td class="docs"><p>initial instance of classes within circumscription</p>
 
 <p>simulator's global state </p>
@@ -4299,7 +4302,8 @@ spec\s+resource\s+
   [{:keys [classes circumscription]
     :or {circumscription :all}
     :as initialize-params}
-   {:keys [verbose]
+   {:keys [verbose
+           soot-debug-show-exceptions]
     :as options}]
   (reset! *simulator-global-state*
           {:fields {:static {}
@@ -4324,12 +4328,14 @@ spec\s+resource\s+
                            (assoc-in options [:circumscription]
                                      circumscription))
           (catch Exception e
-            (print-stack-trace-if-verbose e verbose 3)))))))</pre></td></tr><tr><td class="docs"><p>get both explicit and implicit interesting invokes</p>
+            (when soot-debug-show-exceptions
+              (print-stack-trace e))))))))</pre></td></tr><tr><td class="docs"><p>get both explicit and implicit interesting invokes</p>
 </td><td class="codes"><pre class="brush: clojure">(defn get-all-interesting-invokes
   [^SootMethod root-method
    interesting-method?
    circumscription
-   {:keys [verbose]
+   {:keys [verbose
+           soot-debug-show-exceptions]
     :as options}]
   (let [all-explicit-invokes (atom #{})
         all-implicit-invokes (atom #{})
@@ -4377,7 +4383,8 @@ spec\s+resource\s+
                component-invokes)
         (reset! all-invoke-paths invoke-paths))
       (catch Exception e
-        (print-stack-trace-if-verbose e verbose 3)))
+        (when soot-debug-show-exceptions
+          (print-stack-trace e))))
     ;; return result
     {:explicit-invokes @all-explicit-invokes
      :implicit-invokes @all-implicit-invokes
@@ -4389,7 +4396,8 @@ spec\s+resource\s+
     :as simulation-params}
    {:keys [circumscription
            soot-basic-block-simulation-budget
-           soot-method-simulation-depth-budget]
+           soot-method-simulation-depth-budget
+           soot-debug-show-exceptions]
     :or {circumscription :all}
     :as options}]
   (let [method (try (soot-resolve method)
@@ -4399,32 +4407,6 @@ spec\s+resource\s+
                       (catch Exception e))
         default-return #{(make-invoke-sexp :invoke method this params)}]
     (cond
-      ;;  safe invokes
-      (try
-        (let [method-name (get-soot-name method)
-              class-name (get-soot-class-name method)
-              t (get safe-invokes class-name)]
-          (or (= t :all)
-              (contains? t method-name)))
-        (catch Exception e false))
-      {:returns (let [method-name (get-soot-name method)
-                      class-name (get-soot-class-name method)]
-                  (try
-                    (let [result (cond
-                                   (= method-name &quot;&lt;init&gt;&quot;)
-                                   (clojure.lang.Reflector/invokeConstructor (Class/forName class-name)
-                                                                             (object-array params))
-                                   :otherwise
-                                   (clojure.lang.Reflector/invokeInstanceMethod this
-                                                                                method-name
-                                                                                (object-array params)))]
-                      #{result})
-                    (catch Exception e
-                      default-return)))
-       :explicit-invokes #{}
-       :implicit-invokes #{}
-       :component-invokes #{}
-       :invoke-paths method-name}      
       (not (instance? soot.SootMethod method))
       {:returns default-return
        :explicit-invokes #{}
@@ -4545,6 +4527,7 @@ spec\s+resource\s+
            soot-debug-show-each-statement
            soot-debug-show-locals-per-statement
            soot-debug-show-all-per-statement
+           soot-debug-show-exceptions
            verbose]
     :as options}]
   (let [simulator (atom simulator)
@@ -4561,51 +4544,57 @@ spec\s+resource\s+
                                  start-stmt)))]
     ;; simulate statements in the basic block
     (doseq [^Stmt stmt basic-block]
-      (.. stmt
-          (apply (proxy [StmtSwitch] []
-                   (caseAssignStmt [stmt]
-                     (let [target (.. stmt getLeftOp)
-                           value (-&gt; (.. stmt getRightOp)
-                                     (simulator-evaluate
-                                      {:simulator simulator
-                                       :interesting-method?
-                                       interesting-method?}
-                                      options))]
-                       (simulator-assign target value simulator)))
-                   (caseBreakpointStmt [stmt])
-                   (caseEnterMonitorStmt [stmt])
-                   (caseExitMonitorStmt [stmt])
-                   (caseGotoStmt [stmt])
-                   (caseIdentityStmt [stmt]
-                     (try
+      (try
+        (.. stmt
+            (apply (proxy [StmtSwitch] []
+                     (caseAssignStmt [stmt]
                        (let [target (.. stmt getLeftOp)
-                             value(-&gt; (.. stmt getRightOp)
-                                      (simulator-evaluate
-                                       {:simulator simulator
-                                        :interesting-method?
-                                        interesting-method?}
-                                       options))]
-                         (simulator-assign target value simulator))
-                       (catch Exception e
-                         (print-stack-trace-if-verbose e verbose 4))))
-                   (caseIfStmt [stmt])
-                   (caseInvokeStmt [stmt]
-                     (try
-                       (-&gt; (.. stmt getInvokeExpr)
-                           (simulator-evaluate {:simulator simulator
-                                                :interesting-method?
-                                                interesting-method?}
-                                               options))
-                       (catch Exception e
-                         (print-stack-trace-if-verbose e verbose 4))))
-                   (caseLookupSwitchStmt [stmt])
-                   (caseNopStmt [stmt])
-                   (caseRetStmt [stmt])
-                   (caseReturnStmt [stmt])
-                   (caseReturnVoidStmt [stmt])
-                   (caseTableSwitchStmt [stmt])
-                   (caseThrowStmt [stmt])
-                   (defaultCase [stmt]))))
+                             value (-&gt; (.. stmt getRightOp)
+                                       (simulator-evaluate
+                                        {:simulator simulator
+                                         :interesting-method?
+                                         interesting-method?}
+                                        options))]
+                         (simulator-assign target value simulator)))
+                     (caseBreakpointStmt [stmt])
+                     (caseEnterMonitorStmt [stmt])
+                     (caseExitMonitorStmt [stmt])
+                     (caseGotoStmt [stmt])
+                     (caseIdentityStmt [stmt]
+                       (try
+                         (let [target (.. stmt getLeftOp)
+                               value(-&gt; (.. stmt getRightOp)
+                                        (simulator-evaluate
+                                         {:simulator simulator
+                                          :interesting-method?
+                                          interesting-method?}
+                                         options))]
+                           (simulator-assign target value simulator))
+                         (catch Exception e
+                           (when soot-debug-show-exceptions
+                             (print-stack-trace e)))))
+                     (caseIfStmt [stmt])
+                     (caseInvokeStmt [stmt]
+                       (try
+                         (-&gt; (.. stmt getInvokeExpr)
+                             (simulator-evaluate {:simulator simulator
+                                                  :interesting-method?
+                                                  interesting-method?}
+                                                 options))
+                         (catch Exception e
+                           (when soot-debug-show-exceptions
+                             (print-stack-trace e)))))
+                     (caseLookupSwitchStmt [stmt])
+                     (caseNopStmt [stmt])
+                     (caseRetStmt [stmt])
+                     (caseReturnStmt [stmt])
+                     (caseReturnVoidStmt [stmt])
+                     (caseTableSwitchStmt [stmt])
+                     (caseThrowStmt [stmt])
+                     (defaultCase [stmt]))))
+        (catch Exception e
+          (when soot-debug-show-exceptions
+            (print-stack-trace e))))
       (when (or soot-debug-show-each-statement
                 soot-debug-show-locals-per-statement
                 soot-debug-show-all-per-statement)
@@ -4722,6 +4711,7 @@ spec\s+resource\s+
            soot-dump-all-invokes
            soot-debug-show-implicit-cf
            soot-debug-show-safe-invokes
+           soot-debug-show-exceptions
            layout-callbacks
            verbose]
     :as options}]
@@ -4729,25 +4719,27 @@ spec\s+resource\s+
         ;; binary operation
         binary-operator-expr
         (fn [expr operator operator-name]
-          (let [op1 (-&gt; (.. expr getOp1) (simulator-resolve-value @simulator))
-                op2 (-&gt; (.. expr getOp2) (simulator-resolve-value @simulator))
+          (let [op1 (-&gt; (.. expr getOp1) (simulator-resolve-value @simulator) int)
+                op2 (-&gt; (.. expr getOp2) (simulator-resolve-value @simulator) int)
                 default-return (make-binary-operator-sexp operator-name
                                                           [op1 op2])]
             (try
               (operator op1 op2)
               (catch Exception e
-                (print-stack-trace-if-verbose e verbose 4)
+                (when soot-debug-show-exceptions
+                  (print-stack-trace e))
                 default-return))))
         ;; unary operation
         unary-operator-expr
         (fn [expr operator operator-name]
-          (let [op (-&gt; (.. expr getOp) (simulator-resolve-value @simulator))
+          (let [op (-&gt; (.. expr getOp) (simulator-resolve-value @simulator) int)
                 default-return (make-unary-operator-sexp operator-name
                                                          [op])]
             (try
               (operator op)
               (catch Exception e
-                (print-stack-trace-if-verbose e verbose 4)
+                (when soot-debug-show-exceptions
+                  (print-stack-trace e))
                 default-return)))) 
         ;; invoke operation
         invoke-expr
@@ -4823,21 +4815,27 @@ spec\s+resource\s+
                     (or (= t :all)
                         (contains? t method-name)))
                   (try
-                    (let [result (cond
-                                   ;; special invokes: &lt;init&gt;
-                                   (= invoke-type :special-invoke)
-                                   (simulator-assign base
-                                                     (clojure.lang.Reflector/invokeConstructor (Class/forName class-name)
-                                                                                               (object-array args))
-                                                     simulator)
-                                   ;; other invokes
-                                   :otherwise
+                    (when soot-debug-show-safe-invokes
+                      (println &quot;safe invoke:&quot;
+                               class-name base-value method-name args))                    
+                    (let [result (case invoke-type
+                                   :special-invoke
+                                   (simulator-assign
+                                    base
+                                    (clojure.lang.Reflector/invokeConstructor (Class/forName class-name)
+                                                                              (object-array args))
+                                    simulator)
+                                   :static-invoke
+                                   (clojure.lang.Reflector/invokeStaticMethod class-name
+                                                                              method-name
+                                                                              (object-array args))
+                                   ;; otherwise
                                    (clojure.lang.Reflector/invokeInstanceMethod base-value
                                                                                 method-name
                                                                                 (object-array args)))]
                       (when soot-debug-show-safe-invokes
-                        (println &quot;safe invoke:&quot;
-                                 class-name base-value method-name args result))
+                        (println &quot;safe invoke result:&quot;
+                                 result))
                       (if (and (instance? java.util.Collection result)
                                (&gt; (.size result) soot-simulation-collection-size-budget))
                         default-return
@@ -5136,7 +5134,101 @@ spec\s+resource\s+
                   (doto simulator
                     (swap! simulator-add-invoke-paths
                            #{(.. method getSignature)}))
-                  (catch Exception e))))))]
+                  (catch Exception e))))))
+        cast-expr
+        (fn [expr]
+          (let [value (-&gt; (.. expr getOp) (simulator-resolve-value @simulator))
+                cast-type (.. expr getCastType)
+                default-return (make-cast-sexp value cast-type)]
+            (try
+              (let [result ((cond
+                              (instance? soot.BooleanType cast-type)
+                              boolean
+                              (instance? soot.ByteType cast-type)
+                              byte
+                              (instance? soot.CharType cast-type)
+                              char
+                              (instance? soot.ShortType cast-type)
+                              short
+                              (instance? soot.IntType cast-type)
+                              int
+                              (instance? soot.LongType cast-type)
+                              long
+                              (instance? soot.FloatType cast-type)
+                              float
+                              (instance? soot.DoubleType cast-type)
+                              double
+                              :otherwise
+                              identity)
+                            value)]
+                result)
+              (catch Exception e default-return))))
+        new-array-expr
+        (fn [expr]
+          (let [base-type (.. expr getBaseType)
+                size (-&gt; (.. expr getSize) (simulator-resolve-value @simulator))
+                default-return (make-new-array-sexp base-type size)]
+            (try
+              (let [result
+                    (if (&lt; size soot-simulation-collection-size-budget)
+                      ((cond
+                         (instance? soot.BooleanType base-type)
+                         boolean-array
+                         (instance? soot.ByteType base-type)
+                         byte-array
+                         (instance? soot.CharType base-type)
+                         char-array
+                         (instance? soot.ShortType base-type)
+                         short-array
+                         (instance? soot.IntType base-type)
+                         int-array
+                         (instance? soot.LongType base-type)
+                         long-array
+                         (instance? soot.FloatType base-type)
+                         float-array
+                         (instance? soot.DoubleType base-type)
+                         double-array
+                         :otherwise
+                         object-array)
+                       size)                      
+                      default-return)]
+                result)
+              (catch Exception e default-return))))
+        new-multi-array-expr
+        (fn [expr]
+          (let [base-type (.. expr getBaseType)
+                sizes (-&gt;&gt; (.. expr getSizes)
+                           (map #(simulator-resolve-value % @simulator)))
+                size (reduce * sizes)
+                default-return (make-new-array-sexp base-type sizes)]
+            (try
+              (let [result
+                    (if (&lt; size
+                           soot-simulation-collection-size-budget)
+                      (apply make-array
+                             (cond
+                               (instance? soot.BooleanType base-type)
+                               Boolean/TYPE
+                               (instance? soot.ByteType base-type)
+                               Byte/TYPE
+                               (instance? soot.CharType base-type)
+                               Character/TYPE
+                               (instance? soot.ShortType base-type)
+                               Short/TYPE
+                               (instance? soot.IntType base-type)
+                               Integer/TYPE
+                               (instance? soot.LongType base-type)
+                               Long/TYPE
+                               (instance? soot.FloatType base-type)
+                               Float/TYPE
+                               (instance? soot.DoubleType base-type)
+                               Double/TYPE
+                               :otherwise
+                               Object)
+                             sizes)                      
+                      default-return)]
+                result)
+              (catch Exception e default-return))))]
     (try
       (.. expr
           (apply
@@ -5178,7 +5270,8 @@ spec\s+resource\s+
                (reset! result
                        (binary-operator-expr expr bit-and :and)))
              (caseCastExpr [expr]
-               ;; no effect on result)
+               (reset! result
+                       (cast-expr expr)))
              (caseCmpExpr [expr]
                (reset! result
                        (binary-operator-expr expr compare :cmp)))
@@ -5241,7 +5334,8 @@ spec\s+resource\s+
                                    default-return))
                                :default default-return))
                            (catch Exception e
-                             (print-stack-trace-if-verbose e verbose 4)
+                             (when soot-debug-show-exceptions
+                               (print-stack-trace e))
                              default-return)))))
              (caseInterfaceInvokeExpr [expr]
                (reset! result
@@ -5277,38 +5371,12 @@ spec\s+resource\s+
                        (unary-operator-expr expr - :neg)))
              (caseNewArrayExpr [expr]
                (reset! result
-                       (let [base-type (-&gt; (.. expr getBaseType)
-                                           (simulator-resolve-value @simulator))
-                             size (-&gt; (.. expr getSize)
-                                      (simulator-resolve-value @simulator))
-                             default-return (make-new-array-sexp base-type size)]
-                         (try
-                           (if (&lt; size soot-simulation-collection-size-budget)
-                             (-&gt;&gt; (repeat size nil)
-                                  vec)
-                             default-return)
-                           (catch Exception e
-                             (print-stack-trace-if-verbose e verbose 4)
-                             default-return)))))
+                       (new-array-expr expr)))
              (caseNewExpr [expr]
                ;; will be evaluated in caseSpecialInvokeExpr where the arguments are ready)
              (caseNewMultiArrayExpr [expr]
                (reset! result
-                       (let [base-type (-&gt; (.. expr getBaseType)
-                                           (simulator-resolve-value @simulator))
-                             sizes (-&gt;&gt; (.. expr getSize)
-                                        (map #(simulator-resolve-value % @simulator))
-                                        vec)
-                             size (reduce * sizes)
-                             default-return (make-new-multi-array-sexp base-type sizes)]
-                         (try
-                           (if (&lt; size soot-simulation-collection-size-budget)
-                             (-&gt;&gt; (repeat size nil)
-                                  vec)
-                             default-return)
-                           (catch Exception e
-                             (print-stack-trace-if-verbose e verbose 4)
-                             default-return)))))
+                       (new-multi-array-expr expr)))
              (caseOrExpr [expr]
                (reset! result
                        (binary-operator-expr expr bit-or :or)))
@@ -5355,9 +5423,10 @@ spec\s+resource\s+
                              index (-&gt; (.. ref getIndex) (simulator-resolve-value @simulator))
                              default-return (make-array-ref-sexp base index)]
                          (try
-                           (get base index)
+                           (aget base index)
                            (catch Exception e
-                             (print-stack-trace-if-verbose e verbose 4)
+                             (when soot-debug-show-exceptions
+                               (print-stack-trace e))
                              default-return)))))
              (caseCaughtExceptionRef [ref]
                ;; irrelevant)
@@ -5376,7 +5445,8 @@ spec\s+resource\s+
              ;; default case
              (defaultCase [expr]))))
       (catch Exception e
-        (print-stack-trace-if-verbose e verbose 3)))
+        (when soot-debug-show-exceptions
+          (print-stack-trace e))))
     @result))</pre></td></tr><tr><td class="docs"><p>:nil signify N/A</p>
 </td><td class="codes"><pre class="brush: clojure">(defn- simulator-get-field
   [instance field]
@@ -6190,7 +6260,7 @@ spec\s+resource\s+
     :default 10]
    [nil &quot;--soot-simulation-collection-size-budget BUDGET&quot; &quot;array size simulation budget&quot;
     :parse-fn #(Long/parseLong %)
-    :default 100]   
+    :default 10000]   
    [nil &quot;--soot-simulation-conservative-branching&quot; &quot;branching based on conditions: more precision at the cost of less coverage before budget depletion.&quot;]
    [nil &quot;--soot-simulation-linear-scan&quot; &quot;do not branch or loop: more coverage at the cost of precision&quot;]   
    [&quot;-j&quot; &quot;--soot-parallel-jobs JOBS&quot;
@@ -6207,7 +6277,8 @@ spec\s+resource\s+
    [nil &quot;--soot-debug-show-locals-per-statement&quot; &quot;debug facility: show locals per each statement&quot;]
    [nil &quot;--soot-debug-show-all-per-statement&quot; &quot;debug facility: show all per each statement&quot;]
    [nil &quot;--soot-debug-show-implicit-cf&quot; &quot;debug facility: show all implicit control flows&quot;]
-   [nil &quot;--soot-debug-show-safe-invokes&quot; &quot;debug facility: show all safe invokes&quot;]   
+   [nil &quot;--soot-debug-show-safe-invokes&quot; &quot;debug facility: show all safe invokes&quot;]
+   [nil &quot;--soot-debug-show-exceptions&quot; &quot;debug facility: show all exceptions&quot;]   
    [&quot;-d&quot; &quot;--dump-model FILE&quot; &quot;dump binary APK model; append dump file paths to FILE&quot;]
    [&quot;-O&quot; &quot;--overwrite-model&quot; &quot;overwrite model while dumping&quot;]   
    [&quot;-l&quot; &quot;--load-model FILE&quot; &quot;load binary APK model; load from dump file paths in FILE&quot;]

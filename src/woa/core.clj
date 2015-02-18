@@ -81,7 +81,7 @@
     :default 10]
    [nil "--soot-simulation-collection-size-budget BUDGET" "array size simulation budget"
     :parse-fn #(Long/parseLong %)
-    :default 100]   
+    :default 10000]   
    [nil "--soot-simulation-conservative-branching" "branching based on conditions: more precision at the cost of less coverage before budget depletion."]
    [nil "--soot-simulation-linear-scan" "do not branch or loop: more coverage at the cost of precision"]   
    ["-j" "--soot-parallel-jobs JOBS"
@@ -100,7 +100,8 @@
    [nil "--soot-debug-show-locals-per-statement" "debug facility: show locals per each statement"]
    [nil "--soot-debug-show-all-per-statement" "debug facility: show all per each statement"]
    [nil "--soot-debug-show-implicit-cf" "debug facility: show all implicit control flows"]
-   [nil "--soot-debug-show-safe-invokes" "debug facility: show all safe invokes"]   
+   [nil "--soot-debug-show-safe-invokes" "debug facility: show all safe invokes"]
+   [nil "--soot-debug-show-exceptions" "debug facility: show all exceptions"]   
    
    ["-d" "--dump-model FILE" "dump binary APK model; append dump file paths to FILE"]
    ["-O" "--overwrite-model" "overwrite model while dumping"]   

@@ -1,8 +1,10 @@
 #! /bin/bash
 # Soot (https://sable.github.io/soot/) start-up script
 # author: Wei Peng <write.to.peng.wei@gmail.com>
-# version: 20150216
-# deps: bash, GNU coreutils, wget, procps-ng
+# version: 20150217
+# deps: java, wget
+
+chmod +x $0
 
 # http://stackoverflow.com/a/246128
 DIR=$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )
@@ -37,6 +39,7 @@ do
   if ! [[ -f "${DIR}/${name}" ]]; then
     "${WGET}" -nv -nc -nd -P "${DIR}" "${prefix}/${name}"
   fi
+  chmod +x "${DIR}/${name}"
 done
 
 ## do the real work

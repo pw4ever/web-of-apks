@@ -3,8 +3,10 @@
 # upstream: https://github.com/jexp/batch-import/tree/2.1
 #
 # author: Wei Peng <write.to.peng.wei@gmail.com>
-# version: 20150216
+# version: 20150217
 # deps: wget, tar, java
+
+chmod +x $0
 
 # http://stackoverflow.com/a/246128
 DIR=$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )

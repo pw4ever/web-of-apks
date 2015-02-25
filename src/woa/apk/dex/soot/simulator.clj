@@ -412,7 +412,7 @@
                                        (-> simulator
                                            simulator-get-invoke-paths)))
                               ;; add the following to worklist
-                              (for [start-stmt (set next-start-stmts)]
+                              (for [start-stmt next-start-stmts]
                                 ;; control flow sensitive!
                                 {:simulator (-> simulator
                                                 simulator-clear-returns
@@ -522,7 +522,7 @@
             (pprint @*simulator-global-state*))
           (println "----------"))))
     (let [return (atom {:simulator nil ; to be filled at the end
-                        :next-start-stmts #{}})
+                        :next-start-stmts nil})
           ;; the first stmt of residue, if existed, is a brancher
           stmt (first residue)]
       (when stmt

@@ -6278,7 +6278,7 @@ spec\s+resource\s+
    [nil &quot;--soot-debug-show-all-per-statement&quot; &quot;debug facility: show all per each statement&quot;]
    [nil &quot;--soot-debug-show-implicit-cf&quot; &quot;debug facility: show all implicit control flows&quot;]
    [nil &quot;--soot-debug-show-safe-invokes&quot; &quot;debug facility: show all safe invokes&quot;]
-   [nil &quot;--soot-debug-show-exceptions&quot; &quot;debug facility: show all exceptions&quot;]   
+   [nil &quot;--soot-debug-show-exceptions&quot; &quot;debug facility: show all exceptions&quot;]
    [&quot;-d&quot; &quot;--dump-model FILE&quot; &quot;dump binary APK model; append dump file paths to FILE&quot;]
    [&quot;-O&quot; &quot;--overwrite-model&quot; &quot;overwrite model while dumping&quot;]   
    [&quot;-l&quot; &quot;--load-model FILE&quot; &quot;load binary APK model; load from dump file paths in FILE&quot;]
@@ -6286,6 +6286,7 @@ spec\s+resource\s+
    [nil &quot;--readable-model&quot; &quot;dump/load readable APK model; --dump/load-model FILE will dump/load readable model directly to/from FILE&quot;]
    [nil &quot;--println-model&quot; &quot;println loaded APK model&quot;]
    [nil &quot;--pprint-model&quot; &quot;pprint loaded APK model&quot;]
+   [nil &quot;--debug-cgdfd&quot; &quot;debug facility: show cgdfd and signature&quot;]
    ;; Neo4j config
    [nil &quot;--neo4j-port PORT&quot; &quot;Neo4j server port&quot;
     :parse-fn #(Integer/parseInt %)
@@ -6319,13 +6320,52 @@ spec\s+resource\s+
 </td><td class="codes"><pre class="brush: clojure">(defmacro with-mutex-locked
   [&amp; body]
   `(locking mutex
-     ~@body))</pre></td></tr><tr><td class="docs"><p>do the real work on apk</p>
+     ~@body))</pre></td></tr><tr><td class="docs">
+</td><td class="codes"><pre class="brush: clojure">(defn- debug-print-cgdfd
+  [apk]
+  (let [result (atom {})]
+    (let [the-dex (:dex apk)]
+      (dorun
+       (for [comp-package-name (-&gt;&gt; the-dex keys)]
+         (dorun
+          (for [comp-class-name (-&gt;&gt; (get-in the-dex [comp-package-name])
+                                     keys)]
+            (dorun
+             (for [callback-name (-&gt;&gt; (get-in the-dex [comp-package-name
+                                                       comp-class-name
+                                                       :callbacks])
+                                      keys)]
+               (let [invoke-paths (get-in the-dex
+                                          [comp-package-name
+                                           comp-class-name
+                                           :callbacks
+                                           callback-name
+                                           :invoke-paths])
+                     cgdfd (compute-cgdfd invoke-paths)
+                     signature (compute-cgdfd-signature cgdfd)]
+                 (swap! result assoc
+                        [comp-package-name
+                         comp-class-name
+                         callback-name]
+                        {:cgdfd cgdfd
+                         :signature signature})))))))))
+    (doseq [k (keys @result)]
+      (swap! result update-in [k]
+             (fn [old]
+               (update-in old [:cgdfd]
+                          #(-&gt;&gt; %
+                                (sort-by first)
+                                vec)))))
+    (swap! result assoc
+           :apk (:sha256 apk))
+    (pprint @result)))</pre></td></tr><tr><td class="docs"><p>do the real work on apk</p>
 </td><td class="codes"><pre class="brush: clojure">(defn work
   [{:keys [file-path tags]
     :as task}
    {:keys [verbose
            soot-task-build-model
            dump-model overwrite-model readable-model
+           debug-cgdfd
            neo4j-port neo4j-protocol
            neo4j-task-populate neo4j-task-tag neo4j-task-untag
            neo4j-task-add-callback-signature neo4j-task-remove-callback-signature
@@ -6368,6 +6408,8 @@ spec\s+resource\s+
                             (println dump-fname)))))
                     (catch Exception e
                       (print-stack-trace-if-verbose e verbose))))
+                (when debug-cgdfd
+                  (debug-print-cgdfd apk))
                 (when neo4j-task-populate
                   (neo4j/populate-from-parsed-apk apk
                                                   options))
@@ -6409,6 +6451,7 @@ spec\s+resource\s+
                 nrepl-port
                 load-model dump-model convert-model println-model pprint-model
                 readable-model
+                debug-cgdfd
                 neo4j-task-populate
                 neo4j-task-add-callback-signature neo4j-task-remove-callback-signature
                 neo4j-dump-model-batch-csv]} options]
@@ -6554,6 +6597,8 @@ spec\s+resource\s+
                                    println-model println
                                    ;; nop
                                    :otherwise (constantly nil)) apk)
+                            (when debug-cgdfd
+                              (debug-print-cgdfd apk))
                             (swap! counter inc)
                             (when (and verbose
                                        (&gt; verbose 0))

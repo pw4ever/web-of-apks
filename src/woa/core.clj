@@ -101,7 +101,7 @@
    [nil "--soot-debug-show-all-per-statement" "debug facility: show all per each statement"]
    [nil "--soot-debug-show-implicit-cf" "debug facility: show all implicit control flows"]
    [nil "--soot-debug-show-safe-invokes" "debug facility: show all safe invokes"]
-   [nil "--soot-debug-show-exceptions" "debug facility: show all exceptions"]   
+   [nil "--soot-debug-show-exceptions" "debug facility: show all exceptions"]
    
    ["-d" "--dump-model FILE" "dump binary APK model; append dump file paths to FILE"]
    ["-O" "--overwrite-model" "overwrite model while dumping"]   
@@ -110,6 +110,7 @@
    [nil "--readable-model" "dump/load readable APK model; --dump/load-model FILE will dump/load readable model directly to/from FILE"]
    [nil "--println-model" "println loaded APK model"]
    [nil "--pprint-model" "pprint loaded APK model"]
+   [nil "--debug-cgdfd" "debug facility: show cgdfd and signature"]
 
    ;; Neo4j config
    [nil "--neo4j-port PORT" "Neo4j server port"
@@ -157,6 +158,45 @@
   `(locking mutex
      ~@body))
 
+(defn- debug-print-cgdfd
+  [apk]
+  (let [result (atom {})]
+    (let [the-dex (:dex apk)]
+      (dorun
+       (for [comp-package-name (->> the-dex keys)]
+         (dorun
+          (for [comp-class-name (->> (get-in the-dex [comp-package-name])
+                                     keys)]
+            (dorun
+             (for [callback-name (->> (get-in the-dex [comp-package-name
+                                                       comp-class-name
+                                                       :callbacks])
+                                      keys)]
+               (let [invoke-paths (get-in the-dex
+                                          [comp-package-name
+                                           comp-class-name
+                                           :callbacks
+                                           callback-name
+                                           :invoke-paths])
+                     cgdfd (compute-cgdfd invoke-paths)
+                     signature (compute-cgdfd-signature cgdfd)]
+                 (swap! result assoc
+                        [comp-package-name
+                         comp-class-name
+                         callback-name]
+                        {:cgdfd cgdfd
+                         :signature signature})))))))))
+    (doseq [k (keys @result)]
+      (swap! result update-in [k]
+             (fn [old]
+               (update-in old [:cgdfd]
+                          #(->> %
+                                (sort-by first)
+                                vec)))))
+    (swap! result assoc
+           :apk (:sha256 apk))
+    (pprint @result)))
+
 (defn work
   "do the real work on apk"
   [{:keys [file-path tags]
@@ -164,6 +204,7 @@
    {:keys [verbose
            soot-task-build-model
            dump-model overwrite-model readable-model
+           debug-cgdfd
            neo4j-port neo4j-protocol
            neo4j-task-populate neo4j-task-tag neo4j-task-untag
            neo4j-task-add-callback-signature neo4j-task-remove-callback-signature
@@ -208,6 +249,9 @@
                             (println dump-fname)))))
                     (catch Exception e
                       (print-stack-trace-if-verbose e verbose))))
+
+                (when debug-cgdfd
+                  (debug-print-cgdfd apk))
                 
                 (when neo4j-task-populate
                   (neo4j/populate-from-parsed-apk apk
@@ -257,6 +301,7 @@
                 nrepl-port
                 load-model dump-model convert-model println-model pprint-model
                 readable-model
+                debug-cgdfd
                 neo4j-task-populate
                 neo4j-task-add-callback-signature neo4j-task-remove-callback-signature
                 neo4j-dump-model-batch-csv]} options]
@@ -417,6 +462,9 @@
                                    println-model println
                                    ;; nop
                                    :otherwise (constantly nil)) apk)
+
+                            (when debug-cgdfd
+                              (debug-print-cgdfd apk))
 
                             (swap! counter inc)
                             (when (and verbose

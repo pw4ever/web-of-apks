@@ -223,14 +223,14 @@
                            (let [path (conj path :invoke-paths)
                                  invoke-paths (get-in the-dex path)]
                              (when invoke-paths
-                               ;; link the root node to the Callback and the Dex
+                               ;; link the root node to the Callback and the Apk
                                (let [root-node (invoke-path-get-node invoke-paths)
                                      node [["CallGraphNode"]
                                            {"name" (invoke-path-get-node-name root-node)
                                             "signature" root-node
-                                            "dex" dex-sha256}]]
+                                            "apk" apk-sha256}]]
                                  (merge-node node)
-                                 (merge-rel dex [["CALLGRAPH"] nil] node)
+                                 (merge-rel apk [["CALLGRAPH"] nil] node)
                                  (merge-rel callback [["CALLGRAPH"] nil] node))
                                ;; iteratively link descendants
                                (process-worklist
@@ -245,14 +245,14 @@
                                              parent-node [["CallGraphNode"]
                                                           {"name" (invoke-path-get-node-name node)
                                                            "signature" node
-                                                           "dex" dex-sha256}]]
+                                                           "apk" apk-sha256}]]
                                          (merge-node parent-node)
                                          (dorun
                                           (for [child children]
                                             (let [child-node [["CallGraphNode"]
                                                               {"name" (invoke-path-get-node-name child)
                                                                "signature" child
-                                                               "dex" dex-sha256}]]
+                                                               "apk" apk-sha256}]]
                                               (merge-node child-node)
                                               (merge-rel parent-node [["INVOKE"] nil] child-node))))
                                          (swap! new-worklist into descendants))))
@@ -590,15 +590,15 @@
                           (let [path (conj path :invoke-paths)
                                 invoke-paths (get-in dex path)]
                             (when-let [root-node (invoke-path-get-node invoke-paths)]
-                              ;; link the root node to the Callback and the Dex
+                              ;; link the root node to the Callback and the Apk
                               (swap! result conj
                                      (ntx/statement
                                       (str/join " "
-                                                ["MERGE (dex:Dex {sha256:{dexsha256}})"
+                                                ["MERGE (apk:Apk {sha256:{apksha256}})"
                                                  "MERGE (callback:Callback {name:{callbackname}})"
-                                                 "MERGE (cgnode:CallGraphNode {name:{name},dex:{dexsha256},signature:{signature}})"
-                                                 "MERGE (dex)-[:CALLGRAPH]->(cgnode)<-[:CALLGRAPH]-(callback)"])
-                                      {:dexsha256 dex-sha256
+                                                 "MERGE (cgnode:CallGraphNode {name:{name},apk:{apksha256},signature:{signature}})"
+                                                 "MERGE (apk)-[:CALLGRAPH]->(cgnode)<-[:CALLGRAPH]-(callback)"])
+                                      {:apksha256 apk-sha256
                                        :name (invoke-path-get-node-name root-node)
                                        :signature root-node
                                        :callbackname (str class-name "." callback-name)})))
@@ -614,13 +614,13 @@
                                       (swap! result conj
                                              (ntx/statement
                                               (str/join " "
-                                                        ["MERGE (node:CallGraphNode {name:{name},dex:{dexsha256},signature:{signature}})"
+                                                        ["MERGE (node:CallGraphNode {name:{name},apk:{apksha256},signature:{signature}})"
                                                          "FOREACH ("
                                                          "child in {children} |"
-                                                         "  MERGE (childnode:CallGraphNode {name:child.name,signature:child.signature,dex:{dexsha256}})"
+                                                         "  MERGE (childnode:CallGraphNode {name:child.name,signature:child.signature,apk:{apksha256}})"
                                                          "  MERGE (node)-[:INVOKE]->(childnode)"
                                                          ")"])
-                                              {:dexsha256 dex-sha256
+                                              {:apksha256 apk-sha256
                                                :name (invoke-path-get-node-name node)
                                                :signature node
                                                :children (map #(let [node %]
@@ -812,8 +812,8 @@
                               ["IntentFilterCategory" "name"]
                               ["AndroidAPI" "name"]
                               ["Tag" "id"]
+                              ["CallGraphNode" "apk"]
                               ["CallGraphNode" "name"]
-                              ["CallGraphNode" "dex"]
                               ["CallbackSignature" "apk"]
                               ["CallbackSignature" "name"]]))]
     (let [conn (connect options)

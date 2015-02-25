@@ -55,13 +55,13 @@
 (defn invoke-path-get-node-name [node]
   (cond
     ;; Soot signature format
-    (re-matches #"<[^>]+>" node)
+    (re-matches #"^<.+>$" node)
     (let [[_ class method]
           (re-find #"^<([^:]+):\s+\S+\s+([^(]+)\("
                    node)]
       (str class "." method))
 
-    (re-matches #"[^<]+\[.+\]" node)
+    (re-matches #"^[^<].+\[.+\]" node)
     (let [[_ classmethod]
           (re-find #"^(.+)\[" node)]
       classmethod)

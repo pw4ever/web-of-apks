@@ -6671,12 +6671,12 @@ spec\s+resource\s+
 </td><td class="codes"><pre class="brush: clojure">(defn invoke-path-get-node-name [node]
   (cond
     ;; Soot signature format
-    (re-matches #&quot;&lt;[^&gt;]+&gt;&quot; node)
+    (re-matches #&quot;^&lt;.+&gt;$&quot; node)
     (let [[_ class method]
           (re-find #&quot;^&lt;([^:]+):\s+\S+\s+([^(]+)\(&quot;
                    node)]
       (str class &quot;.&quot; method))
-    (re-matches #&quot;[^&lt;]+\[.+\]&quot; node)
+    (re-matches #&quot;^[^&lt;].+\[.+\]&quot; node)
     (let [[_ classmethod]
           (re-find #&quot;^(.+)\[&quot; node)]
       classmethod)
@@ -6946,14 +6946,14 @@ spec\s+resource\s+
                            (let [path (conj path :invoke-paths)
                                  invoke-paths (get-in the-dex path)]
                              (when invoke-paths
-                               ;; link the root node to the Callback and the Dex
+                               ;; link the root node to the Callback and the Apk
                                (let [root-node (invoke-path-get-node invoke-paths)
                                      node [[&quot;CallGraphNode&quot;]
                                            {&quot;name&quot; (invoke-path-get-node-name root-node)
                                             &quot;signature&quot; root-node
-                                            &quot;dex&quot; dex-sha256}]]
+                                            &quot;apk&quot; apk-sha256}]]
                                  (merge-node node)
-                                 (merge-rel dex [[&quot;CALLGRAPH&quot;] nil] node)
+                                 (merge-rel apk [[&quot;CALLGRAPH&quot;] nil] node)
                                  (merge-rel callback [[&quot;CALLGRAPH&quot;] nil] node))
                                ;; iteratively link descendants
                                (process-worklist
@@ -6968,14 +6968,14 @@ spec\s+resource\s+
                                              parent-node [[&quot;CallGraphNode&quot;]
                                                           {&quot;name&quot; (invoke-path-get-node-name node)
                                                            &quot;signature&quot; node
-                                                           &quot;dex&quot; dex-sha256}]]
+                                                           &quot;apk&quot; apk-sha256}]]
                                          (merge-node parent-node)
                                          (dorun
                                           (for [child children]
                                             (let [child-node [[&quot;CallGraphNode&quot;]
                                                               {&quot;name&quot; (invoke-path-get-node-name child)
                                                                &quot;signature&quot; child
-                                                               &quot;dex&quot; dex-sha256}]]
+                                                               &quot;apk&quot; apk-sha256}]]
                                               (merge-node child-node)
                                               (merge-rel parent-node [[&quot;INVOKE&quot;] nil] child-node))))
                                          (swap! new-worklist into descendants))))
@@ -7300,15 +7300,15 @@ spec\s+resource\s+
                           (let [path (conj path :invoke-paths)
                                 invoke-paths (get-in dex path)]
                             (when-let [root-node (invoke-path-get-node invoke-paths)]
-                              ;; link the root node to the Callback and the Dex
+                              ;; link the root node to the Callback and the Apk
                               (swap! result conj
                                      (ntx/statement
                                       (str/join &quot; &quot;
-                                                [&quot;MERGE (dex:Dex {sha256:{dexsha256}})&quot;
+                                                [&quot;MERGE (apk:Apk {sha256:{apksha256}})&quot;
                                                  &quot;MERGE (callback:Callback {name:{callbackname}})&quot;
-                                                 &quot;MERGE (cgnode:CallGraphNode {name:{name},dex:{dexsha256},signature:{signature}})&quot;
-                                                 &quot;MERGE (dex)-[:CALLGRAPH]-&gt;(cgnode)&lt;-[:CALLGRAPH]-(callback)&quot;])
-                                      {:dexsha256 dex-sha256
+                                                 &quot;MERGE (cgnode:CallGraphNode {name:{name},apk:{apksha256},signature:{signature}})&quot;
+                                                 &quot;MERGE (apk)-[:CALLGRAPH]-&gt;(cgnode)&lt;-[:CALLGRAPH]-(callback)&quot;])
+                                      {:apksha256 apk-sha256
                                        :name (invoke-path-get-node-name root-node)
                                        :signature root-node
                                        :callbackname (str class-name &quot;.&quot; callback-name)})))
@@ -7324,13 +7324,13 @@ spec\s+resource\s+
                                       (swap! result conj
                                              (ntx/statement
                                               (str/join &quot; &quot;
-                                                        [&quot;MERGE (node:CallGraphNode {name:{name},dex:{dexsha256},signature:{signature}})&quot;
+                                                        [&quot;MERGE (node:CallGraphNode {name:{name},apk:{apksha256},signature:{signature}})&quot;
                                                          &quot;FOREACH (&quot;
                                                          &quot;child in {children} |&quot;
-                                                         &quot;  MERGE (childnode:CallGraphNode {name:child.name,signature:child.signature,dex:{dexsha256}})&quot;
+                                                         &quot;  MERGE (childnode:CallGraphNode {name:child.name,signature:child.signature,apk:{apksha256}})&quot;
                                                          &quot;  MERGE (node)-[:INVOKE]-&gt;(childnode)&quot;
                                                          &quot;)&quot;])
-                                              {:dexsha256 dex-sha256
+                                              {:apksha256 apk-sha256
                                                :name (invoke-path-get-node-name node)
                                                :signature node
                                                :children (map #(let [node %]
@@ -7507,8 +7507,8 @@ spec\s+resource\s+
                               [&quot;IntentFilterCategory&quot; &quot;name&quot;]
                               [&quot;AndroidAPI&quot; &quot;name&quot;]
                               [&quot;Tag&quot; &quot;id&quot;]
+                              [&quot;CallGraphNode&quot; &quot;apk&quot;]
                               [&quot;CallGraphNode&quot; &quot;name&quot;]
-                              [&quot;CallGraphNode&quot; &quot;dex&quot;]
                               [&quot;CallbackSignature&quot; &quot;apk&quot;]
                               [&quot;CallbackSignature&quot; &quot;name&quot;]]))]
     (let [conn (connect options)

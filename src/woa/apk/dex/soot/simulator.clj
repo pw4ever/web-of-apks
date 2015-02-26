@@ -475,29 +475,21 @@
                      (caseExitMonitorStmt [stmt])
                      (caseGotoStmt [stmt])
                      (caseIdentityStmt [stmt]
-                       (try
-                         (let [target (.. stmt getLeftOp)
-                               value(-> (.. stmt getRightOp)
-                                        (simulator-evaluate
-                                         {:simulator simulator
-                                          :interesting-method?
-                                          interesting-method?}
-                                         options))]
-                           (simulator-assign target value simulator))
-                         (catch Exception e
-                           (when soot-debug-show-exceptions
-                             (print-stack-trace e)))))
+                       (let [target (.. stmt getLeftOp)
+                             value (-> (.. stmt getRightOp)
+                                       (simulator-evaluate
+                                        {:simulator simulator
+                                         :interesting-method?
+                                         interesting-method?}
+                                        options))]
+                         (simulator-assign target value simulator)))
                      (caseIfStmt [stmt])
                      (caseInvokeStmt [stmt]
-                       (try
-                         (-> (.. stmt getInvokeExpr)
-                             (simulator-evaluate {:simulator simulator
-                                                  :interesting-method?
-                                                  interesting-method?}
-                                                 options))
-                         (catch Exception e
-                           (when soot-debug-show-exceptions
-                             (print-stack-trace e)))))
+                       (-> (.. stmt getInvokeExpr)
+                           (simulator-evaluate {:simulator simulator
+                                                :interesting-method?
+                                                interesting-method?}
+                                               options)))
                      (caseLookupSwitchStmt [stmt])
                      (caseNopStmt [stmt])
                      (caseRetStmt [stmt])
